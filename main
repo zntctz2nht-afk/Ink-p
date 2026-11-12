@@ -63,7 +63,8 @@ button,input,select{font:inherit;color:inherit}
 .btn.ghost{background:transparent;border-color:rgba(255,255,255,.3);color:var(--on-ink)}
 .btn.small{padding:6px 10px;font-size:14px}
 
-.sum{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px}
+.stick{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.sum{padding:10px 16px}
 .sum-in{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 14px}
 .sum .k{font-size:12px;color:var(--muted);white-space:nowrap}
 .sum .v{font-family:var(--display);font-weight:700;font-size:19px;white-space:nowrap}
@@ -74,6 +75,17 @@ button,input,select{font:inherit;color:inherit}
 .pill.warn{background:var(--warn-bg);color:var(--warn)}
 .pill.crit{background:var(--crit-bg);color:var(--crit)}
 
+.tabs{border-top:1px solid var(--line);padding:0 16px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs-in{max-width:1080px;margin:0 auto;display:flex;gap:4px}
+.tab{flex:0 0 auto;background:none;border:0;border-bottom:3px solid transparent;padding:11px 12px 8px;font-family:var(--display);font-weight:700;font-size:15px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:focus-visible{outline-offset:-3px}
+.tab .count{display:inline-block;min-width:20px;text-align:center;font-family:var(--body);font-size:12px;font-weight:600;border-radius:999px;padding:1px 6px;margin-left:6px;background:var(--field);border:1px solid var(--line);color:var(--muted)}
+.tab .count:empty{display:none}
+.panel[hidden]{display:none}
+.wrap.narrow{max-width:760px}
 .wrap{padding:18px 16px 48px;display:grid;gap:16px;grid-template-columns:1fr}
 @media (min-width:900px){.wrap{grid-template-columns:1fr 1fr;align-items:start}.wide{grid-column:1 / -1}}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 16px;min-width:0}
@@ -134,6 +146,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
   </div>
 </header>
 
+<div class="stick">
 <div class="sum" aria-live="polite">
   <div class="sum-in">
     <div><div class="k">Självkostnad</div><div class="v"><span id="s-cost"></span> <small>kr</small></div></div>
@@ -142,10 +155,21 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <div><div class="k">TB per styck</div><div class="v"><span id="s-tb"></span> <small>kr</small></div></div>
   </div>
 </div>
+<nav class="tabs" aria-label="Avsnitt">
+  <div class="tabs-in" role="tablist" id="tabs">
+    <button class="tab" type="button" role="tab" id="tab-inkop" data-tab="inkop" aria-controls="panel-inkop">Inköp</button>
+    <button class="tab" type="button" role="tab" id="tab-pris" data-tab="pris" aria-controls="panel-pris">Prissättning</button>
+    <button class="tab" type="button" role="tab" id="tab-stege" data-tab="stege" aria-controls="panel-stege">Prisstege</button>
+    <button class="tab" type="button" role="tab" id="tab-valuta" data-tab="valuta" aria-controls="panel-valuta">Valuta</button>
+    <button class="tab" type="button" role="tab" id="tab-sparade" data-tab="sparade" aria-controls="panel-sparade">Sparade<span class="count" id="saved-count"></span></button>
+  </div>
+</nav>
+</div>
 
-<main class="wrap">
+<main>
 
-  <section class="card">
+<div class="wrap narrow panel" role="tabpanel" id="panel-inkop" aria-labelledby="tab-inkop">
+  <section class="card wide">
     <h2>Inköp och hemtagning</h2>
     <p class="lead">Från leverantörens pris till vad varan kostar på lagret i Ransta.</p>
     <div class="grid">
@@ -177,8 +201,10 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
       <li class="tot"><span>Självkostnad per styck</span><span id="b-cost"></span></li>
     </ul>
   </section>
+</div>
 
-  <section class="card">
+<div class="wrap narrow panel" role="tabpanel" id="panel-pris" aria-labelledby="tab-pris" hidden>
+  <section class="card wide">
     <h2>Prissättning</h2>
     <p class="lead">Ändra vilket fält du vill. Övriga räknas om. Alla priser är exklusive moms om inget annat står.</p>
     <div class="grid">
@@ -225,8 +251,10 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
       <li><span>Lägsta ÅF-pris för att nå målet</span><span id="p-floor"></span></li>
     </ul>
   </section>
+</div>
 
-  <section class="card">
+<div class="wrap narrow panel" role="tabpanel" id="panel-stege" aria-labelledby="tab-stege" hidden>
+  <section class="card wide">
     <h2>Prisstege</h2>
     <p class="lead">Testa olika ÅF-priser runt det nuvarande. Tryck på en rad för att använda priset.</p>
     <div class="grid">
@@ -240,8 +268,10 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
       <thead><tr><th>ÅF-pris</th><th>ÅF-rabatt</th><th>TG</th><th>TB/st</th><th>TB/år</th></tr></thead>
       <tbody id="ladder"></tbody></table></div>
   </section>
+</div>
 
-  <section class="card">
+<div class="wrap panel" role="tabpanel" id="panel-valuta" aria-labelledby="tab-valuta" hidden>
+  <section class="card wide">
     <h2>Valutakänslighet</h2>
     <p class="lead" id="fx-lead"></p>
     <div class="scroll"><table>
@@ -272,7 +302,9 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
       <tbody id="rates"></tbody></table></div>
     <p class="note">Sidan kan inte hämta kurser automatiskt. Ändringar här slår igenom direkt i hela kalkylen.</p>
   </section>
+</div>
 
+<div class="wrap panel" role="tabpanel" id="panel-sparade" aria-labelledby="tab-sparade" hidden>
   <section class="card wide">
     <h2>Sparade kalkyler</h2>
     <p class="lead">Jämför produkter eller prisnivåer sida vid sida. Sparas i den här webbläsaren.</p>
@@ -281,6 +313,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
       <tbody id="saved"></tbody></table></div>
     <div class="empty" id="saved-empty">Inga sparade kalkyler än. Tryck på Spara kalkyl högst upp.</div>
   </section>
+</div>
 </main>
 
 <script>
@@ -292,12 +325,12 @@ var DEF={name:'Avhärdare 20 L med WiFi-ventil (exempel)',price:285,cur:'EUR',qt
   duty:0,other:35,overhead:5,fxBuf:2,N:5490,R:7996,campaign:0,vat:25,targetTG:35,step:'5',vol:120,
   cvAmt:1000,cvFrom:'EUR',cvTo:'SEK',
   rates:{EUR:11.051,USD:9.9317,CNY:1.4889,GBP:13.1558,NOK:1.0354,DKK:1.4814}};
-var s=JSON.parse(JSON.stringify(DEF)), saved=[];
+var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop';
 try{
   var raw=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; }
+  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; }
 }catch(e){}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved}))}catch(e){}}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab}))}catch(e){}}
 
 var $=function(id){return document.getElementById(id)};
 function num(v){var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.'));return isFinite(n)?n:0}
@@ -401,6 +434,7 @@ function render(){
 
   /* Sparade */
   $('saved-empty').style.display=saved.length?'none':'block';
+  txt('saved-count',saved.length?String(saved.length):'');
   $('saved').innerHTML=saved.map(function(it,i){
     var x=calc(it);
     return '<tr><td style="white-space:normal;min-width:140px">'+esc(it.name||'Namnlös')+'</td><td>'+kr(x.cost)+'</td><td>'+kr(it.N)+'</td><td>'+kr(x.rin)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+pct(x.tg)+'</td><td>'+kr(x.tb)+'</td><td><button class="linkbtn" type="button" data-load="'+i+'">Öppna</button><button class="linkbtn" type="button" data-del="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>';
@@ -451,7 +485,7 @@ $('save').addEventListener('click',function(){
 });
 $('saved').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
-  if(b.dataset.load!==undefined){ s=JSON.parse(JSON.stringify(saved[+b.dataset.load])); fill(); render(); window.scrollTo({top:0}); }
+  if(b.dataset.load!==undefined){ s=JSON.parse(JSON.stringify(saved[+b.dataset.load])); fill(); render(); showTab('inkop'); }
   else if(b.dataset.del!==undefined){ saved.splice(+b.dataset.del,1); render(); }
 });
 $('copy').addEventListener('click',function(){
@@ -468,7 +502,30 @@ $('copy').addEventListener('click',function(){
 });
 function flash(b,msg){var o=b.dataset.o||(b.dataset.o=b.textContent); b.textContent=msg; setTimeout(function(){b.textContent=o},1400)}
 
-fill(); render();
+/* Flikar */
+var TABS=[].slice.call(document.querySelectorAll('#tabs .tab'));
+function showTab(name,focus){
+  if(!TABS.some(function(b){return b.dataset.tab===name})) name='inkop';
+  tab=name;
+  TABS.forEach(function(b){
+    var on=b.dataset.tab===name;
+    b.setAttribute('aria-selected',on?'true':'false'); b.tabIndex=on?0:-1;
+    $('panel-'+b.dataset.tab).hidden=!on;
+    if(on){ if(focus)b.focus(); if(b.scrollIntoView)b.scrollIntoView({block:'nearest',inline:'nearest'}); }
+  });
+  if(location.hash.slice(1)!==name){ try{history.replaceState(null,'','#'+name)}catch(e){} }
+  window.scrollTo({top:0});
+  persist();
+}
+$('tabs').addEventListener('click',function(e){var b=e.target.closest('.tab'); if(b)showTab(b.dataset.tab)});
+$('tabs').addEventListener('keydown',function(e){
+  var i=TABS.indexOf(e.target.closest('.tab')), n=TABS.length; if(i<0)return;
+  var j=e.key==='ArrowRight'?(i+1)%n:e.key==='ArrowLeft'?(i+n-1)%n:e.key==='Home'?0:e.key==='End'?n-1:-1;
+  if(j>=0){e.preventDefault();showTab(TABS[j].dataset.tab,true)}
+});
+window.addEventListener('hashchange',function(){var h=location.hash.slice(1); if(h&&h!==tab)showTab(h)});
+
+fill(); render(); showTab(location.hash.slice(1)||tab);
 })();
 </script>
 </body>
