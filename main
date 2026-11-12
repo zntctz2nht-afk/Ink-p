@@ -85,6 +85,16 @@ button,input,select{font:inherit;color:inherit}
 .tab .count{display:inline-block;min-width:20px;text-align:center;font-family:var(--body);font-size:12px;font-weight:600;border-radius:999px;padding:1px 6px;margin-left:6px;background:var(--field);border:1px solid var(--line);color:var(--muted)}
 .tab .count:empty{display:none}
 .panel[hidden]{display:none}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.vh:focus-visible+label{outline:3px solid var(--accent);outline-offset:2px}
+.grid.auto{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.inp.sel select{border-left:0;width:100%}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);font-weight:500;margin-top:12px}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+.banner{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:14px;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+[hidden]{display:none!important}
+td.txt{text-align:left;white-space:normal;min-width:160px}
+td.chg{font-weight:600}
 .wrap.narrow{max-width:760px}
 .wrap{padding:18px 16px 48px;display:grid;gap:16px;grid-template-columns:1fr}
 @media (min-width:900px){.wrap{grid-template-columns:1fr 1fr;align-items:start}.wide{grid-column:1 / -1}}
@@ -161,6 +171,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <button class="tab" type="button" role="tab" id="tab-pris" data-tab="pris" aria-controls="panel-pris">Prissättning</button>
     <button class="tab" type="button" role="tab" id="tab-stege" data-tab="stege" aria-controls="panel-stege">Prisstege</button>
     <button class="tab" type="button" role="tab" id="tab-valuta" data-tab="valuta" aria-controls="panel-valuta">Valuta</button>
+    <button class="tab" type="button" role="tab" id="tab-prisfil" data-tab="prisfil" aria-controls="panel-prisfil">Prisfil<span class="count" id="pf-count"></span></button>
     <button class="tab" type="button" role="tab" id="tab-sparade" data-tab="sparade" aria-controls="panel-sparade">Sparade<span class="count" id="saved-count"></span></button>
   </div>
 </nav>
@@ -304,6 +315,72 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
   </section>
 </div>
 
+<div class="wrap panel" role="tabpanel" id="panel-prisfil" aria-labelledby="tab-prisfil" hidden>
+  <section class="card wide">
+    <h2>Prisfil från Visma</h2>
+    <p class="lead">Exportera artiklarna med nuvarande priser från Visma Administration 2000 som textfil och läs in filen här. Den stannar i den här webbläsaren.</p>
+    <div class="chips" style="margin-top:0">
+      <input type="file" id="pf-file" class="vh" accept=".txt,.csv,.skv,.tsv,text/plain,text/csv">
+      <label class="btn primary" for="pf-file">Välj fil</label>
+      <span id="pf-info">Ingen fil inläst.</span>
+      <button class="linkbtn" type="button" id="pf-clear" style="color:var(--crit)" hidden>Ta bort filen</button>
+    </div>
+    <div id="pf-setup" hidden>
+      <div class="grid auto" style="margin-top:16px">
+        <label class="f">Avgränsare
+          <span class="inp sel"><select id="pf-delim"><option value="\t">Tabb</option><option value=";">Semikolon</option><option value=",">Komma</option><option value="|">Lodstreck</option></select></span></label>
+        <label class="f">Artikelnummer
+          <span class="inp sel"><select data-pfmap="art"></select></span></label>
+        <label class="f">Benämning
+          <span class="inp sel"><select data-pfmap="name"></select></span></label>
+        <label class="f">Pris som ska ändras
+          <span class="inp sel"><select data-pfmap="price"></select></span></label>
+        <label class="f">Inköpspris (valfritt)
+          <span class="inp sel"><select data-pfmap="cost"></select></span></label>
+        <label class="f">Priset i filen motsvarar
+          <span class="inp sel"><select id="pf-kind"><option value="N">ÅF-pris netto</option><option value="R">Rek. konsumentpris exkl. moms</option><option value="Rin">Konsumentpris inkl. moms</option></select></span></label>
+      </div>
+      <label class="check"><input type="checkbox" id="pf-header"> Första raden är kolumnrubriker</label>
+      <p class="note">Kontrollera att rätt kolumner är valda. Tabellen nedan visar hur filen tolkas.</p>
+    </div>
+  </section>
+
+  <section class="card wide" id="pf-work" hidden>
+    <h2>Nya priser</h2>
+    <p class="lead">Skriv ett nytt pris på raden, eller räkna om alla rader som visas. Tomt fält betyder att priset är oförändrat.</p>
+    <div class="grid auto">
+      <label class="f">Sök artikel
+        <span class="inp"><input id="pf-q" type="search" placeholder="Nummer eller benämning"></span></label>
+      <label class="f">Ändra nuvarande pris med
+        <span class="inp"><input id="pf-pct" inputmode="decimal" value="5"><span class="u">%</span></span></label>
+      <label class="f" id="pf-tg-f">Täckningsgrad att sikta på
+        <span class="inp"><input id="pf-tg" inputmode="decimal" value="35"><span class="u">%</span></span></label>
+      <label class="f">Avrundning
+        <span class="inp sel"><select id="pf-round"><option value="0">Ingen (två decimaler)</option><option value="1">Hel krona</option><option value="10">Jämn tia</option><option value="90">Slutar på 90</option><option value="95">Slutar på 95</option><option value="100">Jämnt hundratal</option></select></span></label>
+    </div>
+    <div class="chips">
+      <button class="btn small" type="button" id="pf-apply">Ändra visade rader med procent</button>
+      <button class="btn small" type="button" id="pf-applytg">Sätt visade rader efter täckningsgrad</button>
+      <button class="btn small" type="button" id="pf-reset">Återställ alla</button>
+    </div>
+    <div class="banner" id="pf-link" hidden></div>
+    <p class="note" id="pf-sum" aria-live="polite"></p>
+    <div class="scroll"><table>
+      <thead id="pf-head"></thead>
+      <tbody id="pf-body"></tbody></table></div>
+    <div class="chips"><span id="pf-shown"></span><button class="btn small" type="button" id="pf-more" hidden>Visa fler</button></div>
+
+    <h2 style="margin-top:24px">Skapa ny prisfil</h2>
+    <p class="lead">Filen får samma kolumner, avgränsare och teckenkodning som den du läste in. Bara priskolumnen ändras.</p>
+    <div class="grid auto">
+      <label class="f">Rader i filen
+        <span class="inp sel"><select id="pf-which"><option value="all">Alla rader</option><option value="changed">Bara rader med ändrat pris</option></select></span></label>
+    </div>
+    <div class="chips"><button class="btn primary" type="button" id="pf-export">Skapa prisfil</button><span id="pf-exnote"></span></div>
+    <p class="note">Ta en säkerhetskopia i Visma innan du läser in filen, och läs in den med samma fältordning som vid exporten.</p>
+  </section>
+</div>
+
 <div class="wrap panel" role="tabpanel" id="panel-sparade" aria-labelledby="tab-sparade" hidden>
   <section class="card wide">
     <h2>Sparade kalkyler</h2>
@@ -439,6 +516,7 @@ function render(){
     var x=calc(it);
     return '<tr><td style="white-space:normal;min-width:140px">'+esc(it.name||'Namnlös')+'</td><td>'+kr(x.cost)+'</td><td>'+kr(it.N)+'</td><td>'+kr(x.rin)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+pct(x.tg)+'</td><td>'+kr(x.tb)+'</td><td><button class="linkbtn" type="button" data-load="'+i+'">Öppna</button><button class="linkbtn" type="button" data-del="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>';
   }).join('');
+  pfBanner();
   persist();
 }
 function esc(t){return String(t).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]})}
@@ -501,6 +579,265 @@ $('copy').addEventListener('click',function(){
   catch(e){ flash(btn,'Gick inte att kopiera'); }
 });
 function flash(b,msg){var o=b.dataset.o||(b.dataset.o=b.textContent); b.textContent=msg; setTimeout(function(){b.textContent=o},1400)}
+
+/* Prisfil: läs in artikelpriser från Visma, ändra dem och skriv ut en fil i samma format. */
+var PFKEY='renton-prisfil-v1', pf=null, pfLimit=200, pfTimer=null, pfStoreFail=false;
+var DELIM_NAME={'\t':'tabbavgränsad',';':'semikolonavgränsad',',':'kommaavgränsad','|':'avgränsad med lodstreck'};
+
+function pnum(v){
+  v=String(v==null?'':v).replace(/[\s\u00a0]/g,'');
+  if(!/^-?\d[\d.,]*$/.test(v)) return NaN;
+  var lc=v.lastIndexOf(','), ld=v.lastIndexOf('.');
+  if(lc>-1&&ld>-1) v=lc>ld?v.replace(/\./g,'').replace(',','.'):v.replace(/,/g,'');
+  else if(lc>-1) v=v.replace(',','.');
+  return parseFloat(v);
+}
+function roundTo(x,m){
+  if(m===1) return Math.round(x);
+  if(m===10) return Math.round(x/10)*10;
+  if(m===100) return Math.round(x/100)*100;
+  if(m===90||m===95) return Math.max(m,Math.round((x-m)/100)*100+m);
+  return Math.round(x*100)/100;
+}
+function pfParse(text,delim){
+  var rows=[],qs=[],row=[],qr=[],cell='',inQ=false,wasQ=false,i=0,n=text.length,ch;
+  function endCell(){row.push(cell);qr.push(wasQ);cell='';wasQ=false}
+  function endRow(){ if(row.length||cell!==''||wasQ){endCell();rows.push(row);qs.push(qr);} row=[];qr=[]; }
+  while(i<n){
+    ch=text[i];
+    if(inQ){ if(ch==='"'){ if(text[i+1]==='"'){cell+='"';i+=2;continue} inQ=false;i++;continue } cell+=ch;i++;continue }
+    if(ch==='"'&&cell===''&&!wasQ){inQ=true;wasQ=true;i++;continue}
+    if(ch===delim){endCell();i++;continue}
+    if(ch==='\r'||ch==='\n'){ endRow(); i+=(ch==='\r'&&text[i+1]==='\n')?2:1; continue }
+    cell+=ch;i++;
+  }
+  endRow();
+  return {rows:rows,q:qs};
+}
+function pfDetectDelim(text){
+  var lines=text.split(/\r?\n|\r/).filter(function(l){return l.trim()!==''}).slice(0,10), best=';', bestScore=0;
+  ['\t',';',',','|'].forEach(function(d){
+    var min=Infinity;
+    lines.forEach(function(l){var c=0,q=false;for(var i=0;i<l.length;i++){if(l[i]==='"')q=!q;else if(!q&&l[i]===d)c++}min=Math.min(min,c)});
+    if(isFinite(min)&&min>bestScore){bestScore=min;best=d}
+  });
+  return best;
+}
+function pfStart(){return pf.header?1:0}
+function pfNcol(){var n=0;pf.rows.slice(0,50).forEach(function(r){n=Math.max(n,r.length)});return n}
+function pfGuess(){
+  /* gissar rubrikrad och kolumner utifrån innehållet; användaren kan ändra */
+  var R=pf.rows, nc=pfNcol(), c;
+  var isNum=function(v){return !isNaN(pnum(v))};
+  pf.header=R.length>1&&R[0].every(function(v){return !isNum(v)})&&R[1].some(isNum);
+  var data=R.slice(pfStart(),pfStart()+50);
+  var share=function(col){var a=0,b=0;data.forEach(function(r){var v=r[col];if(v!==undefined&&v!==''){b++;if(isNum(v))a++}});return b?a/b:0};
+  var hasDec=function(col){return data.some(function(r){return /[.,]\d{1,4}$/.test(r[col]||'')})};
+  var m={art:0,name:-1,price:-1,cost:-1};
+  if(pf.header){
+    var find=function(re,skip){for(var c=0;c<nc;c++){if(c!==skip&&re.test(R[0][c]||''))return c}return -1};
+    c=find(/art.*(nr|num)|^nr$|^artikel$|sku/i); if(c>-1)m.art=c;
+    m.name=find(/ben|namn|beskr|text/i);
+    m.cost=find(/ink|kalkyl/i);
+    m.price=find(/pris/i,m.cost);
+  }
+  for(c=0;c<nc&&m.name<0;c++) if(c!==m.art&&share(c)<0.2) m.name=c;
+  for(c=0;c<nc&&m.price<0;c++) if(c!==m.art&&c!==m.cost&&share(c)>0.8&&hasDec(c)) m.price=c;
+  for(c=0;c<nc&&m.price<0;c++) if(c!==m.art&&c!==m.cost&&share(c)>0.8) m.price=c;
+  pf.map=m;
+}
+function pfReparse(){ var r=pfParse(pf.text,pf.delim); pf.rows=r.rows; pf.q=r.q; }
+function pfLoad(buf,name){
+  var b=new Uint8Array(buf), enc='utf-8', bom=false, text;
+  if(b[0]===0xEF&&b[1]===0xBB&&b[2]===0xBF){bom=true;text=new TextDecoder('utf-8').decode(b.subarray(3))}
+  else{ try{text=new TextDecoder('utf-8',{fatal:true}).decode(b)}catch(e){enc='windows-1252';text=new TextDecoder('windows-1252').decode(b)} }
+  pf={name:name,enc:enc,bom:bom,text:text,delim:pfDetectDelim(text),kind:'N',np:{},link:null};
+  pfReparse(); pfGuess(); pfLimit=200; $('pf-q').value='';
+  pfRender(); pfSave();
+}
+function pfSave(){
+  clearTimeout(pfTimer);
+  pfTimer=setTimeout(function(){
+    try{
+      if(!pf) localStorage.removeItem(PFKEY);
+      else localStorage.setItem(PFKEY,JSON.stringify({name:pf.name,enc:pf.enc,bom:pf.bom,text:pf.text,delim:pf.delim,header:pf.header,map:pf.map,kind:pf.kind,np:pf.np,link:pf.link}));
+      pfStoreFail=false;
+    }catch(e){pfStoreFail=true}
+    pfInfo();
+  },300);
+}
+function pfCur(i){return pnum(pf.rows[i][pf.map.price])}
+function pfChanged(i){var v=pf.np[i]; return v!==undefined&&!(Math.abs(v-pfCur(i))<0.005)}
+function pfCell(i,k){var c=pf.map[k]; return c>-1?(pf.rows[i][c]||''):''}
+function pfFiltered(){
+  var q=$('pf-q').value.trim().toLowerCase(), out=[];
+  for(var i=pfStart();i<pf.rows.length;i++){
+    if(!q||(pfCell(i,'art')+' '+pfCell(i,'name')).toLowerCase().indexOf(q)>-1) out.push(i);
+  }
+  return out;
+}
+function pfChangeHtml(i){
+  var cur=pfCur(i), v=pf.np[i];
+  if(!pfChanged(i)) return '';
+  if(!(cur>0)) return 'nytt';
+  var d=(v/cur-1)*100; return (d>0?'+':'−')+fmt(Math.abs(d),1)+' %';
+}
+function pfTgHtml(i){
+  var cost=pnum(pfCell(i,'cost')), v=pf.np[i]!==undefined?pf.np[i]:pfCur(i);
+  return v>0&&!isNaN(cost)?pct((v-cost)/v):'–';
+}
+function pfInfo(){
+  if(!pf){ txt('pf-info','Ingen fil inläst.'); return; }
+  txt('pf-info',pf.name+' · '+fmt(pf.rows.length-pfStart())+' artiklar · '+(DELIM_NAME[pf.delim]||'')+' · '+(pf.enc==='utf-8'?'UTF-8':'Windows-1252 (ANSI)')+
+    (pfStoreFail?' · Filen är för stor för att sparas i webbläsaren. Skapa prisfilen innan du stänger sidan.':''));
+}
+function pfSummary(){
+  var n=0,sum=0,k=0,tot=pf.rows.length-pfStart();
+  for(var i=pfStart();i<pf.rows.length;i++) if(pfChanged(i)){ n++; var c=pfCur(i); if(c>0){sum+=pf.np[i]/c-1;k++} }
+  txt('pf-sum',n?fmt(n)+' av '+fmt(tot)+' priser ändrade'+(k?' · snittändring '+(sum/k>=0?'+':'−')+fmt(Math.abs(sum/k*100),1)+' %':'')+'.':'Inga priser ändrade än.');
+  txt('pf-count',n?String(n):'');
+  txt('pf-exnote','');
+}
+function pfBanner(){
+  var el=$('pf-link');
+  if(!pf||pf.link==null||!pf.rows[pf.link]||pf.map.price<0){ el.hidden=true; return; }
+  var v=pf.kind==='N'?s.N:pf.kind==='R'?s.R:calc(s).rin;
+  var lab=pf.kind==='N'?'ÅF-pris netto':pf.kind==='R'?'rek. konsumentpris':'konsumentpris inkl. moms';
+  el.hidden=false;
+  el.innerHTML='<span>Kalkylen för <b>'+esc(pfCell(pf.link,'art')||pfCell(pf.link,'name'))+'</b> ger '+lab+' '+kr(v)+'.</span>'+
+    '<button class="btn small" type="button" data-pfuse="'+v+'">Använd som nytt pris</button><button class="linkbtn" type="button" data-pfunlink="1">Stäng</button>';
+}
+function pfRender(){
+  var on=!!pf;
+  $('pf-setup').hidden=!on; $('pf-work').hidden=!on; $('pf-clear').hidden=!on;
+  pfInfo();
+  if(!on){ txt('pf-count',''); return; }
+  var nc=pfNcol(), m=pf.map, first=pf.rows[pfStart()]||[];
+  $('pf-delim').value=pf.delim; $('pf-header').checked=pf.header; $('pf-kind').value=pf.kind;
+  document.querySelectorAll('[data-pfmap]').forEach(function(sel){
+    var k=sel.dataset.pfmap, h=(k==='cost'||k==='name')?'<option value="-1">Ingen</option>':'';
+    for(var c=0;c<nc;c++){
+      var lab=pf.header&&pf.rows[0][c]?pf.rows[0][c]:'Kolumn '+(c+1), ex=(first[c]||'').slice(0,18);
+      h+='<option value="'+c+'">'+esc(lab+(ex?' (t.ex. '+ex+')':''))+'</option>';
+    }
+    sel.innerHTML=h; sel.value=String(m[k]);
+  });
+  var hasCost=m.cost>-1;
+  $('pf-tg-f').hidden=!hasCost; $('pf-applytg').hidden=!hasCost;
+  $('pf-head').innerHTML='<tr><th>Artikelnr</th><th style="text-align:left">Benämning</th>'+(hasCost?'<th>Inköpspris</th>':'')+'<th>Nuvarande</th><th>Nytt pris</th><th>Ändring</th>'+(hasCost?'<th>TG</th>':'')+'<th></th></tr>';
+  var list=pfFiltered(), rows='';
+  list.slice(0,pfLimit).forEach(function(i){
+    var cur=pfCur(i), v=pf.np[i];
+    rows+='<tr><td>'+esc(pfCell(i,'art'))+'</td><td class="txt">'+esc(pfCell(i,'name'))+'</td>'+
+      (hasCost?'<td>'+fmt(pnum(pfCell(i,'cost')),2)+'</td>':'')+
+      '<td>'+fmt(cur,2)+'</td>'+
+      '<td><input data-pf="'+i+'" inputmode="decimal" aria-label="Nytt pris '+esc(pfCell(i,'art'))+'" placeholder="'+(isNaN(cur)?'':plain(cur,2))+'" value="'+(v!==undefined?plain(v,2):'')+'"></td>'+
+      '<td class="chg" id="pfc-'+i+'">'+pfChangeHtml(i)+'</td>'+
+      (hasCost?'<td id="pft-'+i+'">'+pfTgHtml(i)+'</td>':'')+
+      '<td><button class="linkbtn" type="button" data-pfcalc="'+i+'">Till kalkyl</button></td></tr>';
+  });
+  $('pf-body').innerHTML=rows||'<tr><td colspan="8" class="txt" style="color:var(--muted)">Inga artiklar matchar sökningen.</td></tr>';
+  txt('pf-shown','Visar '+fmt(Math.min(pfLimit,list.length))+' av '+fmt(list.length)+' artiklar.');
+  $('pf-more').hidden=list.length<=pfLimit;
+  pfSummary(); pfBanner();
+}
+function pfSet(i,v){ if(v===undefined||isNaN(v)) delete pf.np[i]; else pf.np[i]=v; }
+function pfFormat(orig,v,dsep,dec){
+  /* samma decimaltecken och antal decimaler som originalcellen */
+  var mm=/([.,])(\d+)$/.exec(String(orig).replace(/[\s\u00a0]/g,'')), sep=mm?mm[1]:dsep, d=mm?mm[2].length:(isNaN(pnum(orig))?dec:0);
+  if(Math.abs(+v.toFixed(d)-v)>0.0001) d=2;
+  return v.toFixed(d).replace('.',sep);
+}
+function pfBuild(onlyChanged){
+  var col=pf.map.price, dsep=',', dec=2, i, mm;
+  for(i=pfStart();i<pf.rows.length;i++){ mm=/([.,])(\d+)$/.exec(pf.rows[i][col]||''); if(mm){dsep=mm[1];dec=mm[2].length;break} }
+  if(i===pf.rows.length) dec=0;
+  var eol=/\r\n/.test(pf.text)?'\r\n':(/\r/.test(pf.text)?'\r':'\n'), lines=[], n=0;
+  var needQ=new RegExp('["\\r\\n'+(pf.delim==='|'?'\\|':pf.delim)+']');
+  pf.rows.forEach(function(r,idx){
+    var ch=idx>=pfStart()&&pfChanged(idx);
+    if(onlyChanged&&idx>=pfStart()&&!ch) return;
+    if(ch) n++;
+    lines.push(r.map(function(v,c){
+      if(ch&&c===col) v=pfFormat(v,pf.np[idx],dsep,dec);
+      return (pf.q[idx][c]||needQ.test(v))?'"'+v.replace(/"/g,'""')+'"':v;
+    }).join(pf.delim));
+  });
+  return {text:lines.join(eol)+(/[\r\n]$/.test(pf.text)?eol:''),changed:n};
+}
+function pfEncode(text){
+  if(pf.enc==='utf-8'){ var u=new TextEncoder().encode(text); if(!pf.bom) return u; var o=new Uint8Array(u.length+3); o.set([0xEF,0xBB,0xBF]); o.set(u,3); return o; }
+  var hi={}, dec=new TextDecoder('windows-1252'), i;
+  for(i=0x80;i<0xA0;i++) hi[dec.decode(new Uint8Array([i]))]=i;
+  var out=new Uint8Array(text.length);
+  for(i=0;i<text.length;i++){ var c=text.charCodeAt(i); out[i]=(c<0x80||(c>=0xA0&&c<0x100))?c:(hi[text[i]]||0x3F); }
+  return out;
+}
+
+$('pf-file').addEventListener('change',function(){
+  var f=this.files&&this.files[0], inp=this; if(!f) return;
+  var fr=new FileReader();
+  fr.onload=function(){ pfLoad(fr.result,f.name); inp.value=''; };
+  fr.readAsArrayBuffer(f);
+});
+$('pf-clear').addEventListener('click',function(){
+  var n=0; for(var k in pf.np) if(pfChanged(+k)) n++;
+  if(n&&!confirm('Ta bort filen och '+n+' ändrade priser?')) return;
+  pf=null; pfRender(); pfSave();
+});
+$('panel-prisfil').addEventListener('change',function(e){
+  var el=e.target; if(!pf) return;
+  if(el.id==='pf-delim'){ pf.delim=el.value; pfReparse(); pfGuess(); pf.np={}; pf.link=null; }
+  else if(el.id==='pf-header') pf.header=el.checked;
+  else if(el.id==='pf-kind') pf.kind=el.value;
+  else if(el.dataset.pfmap){ pf.map[el.dataset.pfmap]=+el.value; if(el.dataset.pfmap==='price') pf.np={}; }
+  else return;
+  pfRender(); pfSave();
+});
+$('panel-prisfil').addEventListener('input',function(e){
+  var el=e.target; if(!pf) return;
+  if(el.id==='pf-q'){ pfLimit=200; pfRender(); return; }
+  if(el.dataset.pf!==undefined){
+    var i=+el.dataset.pf; pfSet(i,el.value.trim()===''?undefined:num(el.value));
+    $('pfc-'+i).textContent=pfChangeHtml(i); if($('pft-'+i)) $('pft-'+i).textContent=pfTgHtml(i);
+    pfSummary(); pfSave();
+  }
+});
+$('panel-prisfil').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b||!pf) return;
+  var m=+$('pf-round').value, i, v;
+  if(b.id==='pf-apply'){
+    var p=num($('pf-pct').value)/100;
+    pfFiltered().forEach(function(i){var c=pfCur(i); if(!isNaN(c)) pfSet(i,roundTo(c*(1+p),m))});
+  }else if(b.id==='pf-applytg'){
+    var tgv=Math.min(num($('pf-tg').value),99.9)/100;
+    pfFiltered().forEach(function(i){var c=pnum(pfCell(i,'cost')); if(c>0) pfSet(i,roundTo(c/(1-tgv),m))});
+  }else if(b.id==='pf-reset'){
+    if(!confirm('Återställa alla nya priser?')) return; pf.np={};
+  }else if(b.id==='pf-more'){ pfLimit+=200;
+  }else if(b.dataset.pfcalc!==undefined){
+    i=+b.dataset.pfcalc; v=pf.np[i]!==undefined?pf.np[i]:pfCur(i);
+    s.name=(pfCell(i,'art')+' '+pfCell(i,'name')).trim();
+    if(v>0){ if(pf.kind==='N') s.N=v; else if(pf.kind==='R') s.R=v; else s.R=v/(1+s.vat/100); }
+    pf.link=i; pfSave(); fill(); render(); showTab('pris'); return;
+  }else if(b.dataset.pfuse!==undefined){ pfSet(pf.link,roundTo(+b.dataset.pfuse,0)); pf.link=null;
+  }else if(b.dataset.pfunlink){ pf.link=null;
+  }else if(b.id==='pf-export'){
+    if(pf.map.price<0){ txt('pf-exnote','Välj först vilken kolumn som är priset.'); return; }
+    var res=pfBuild($('pf-which').value==='changed');
+    if(!res.changed){ txt('pf-exnote','Inga priser är ändrade, så det finns inget att skriva ut.'); return; }
+    var dot=pf.name.lastIndexOf('.'), fn=(dot>0?pf.name.slice(0,dot):pf.name)+'-nya-priser'+(dot>0?pf.name.slice(dot):'.txt');
+    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([pfEncode(res.text)],{type:'application/octet-stream'}));
+    a.download=fn; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+    pfSummary(); txt('pf-exnote',fn+' skapad med '+fmt(res.changed)+' ändrade priser.'); return;
+  }else return;
+  pfRender(); pfSave();
+});
+try{
+  var pr=JSON.parse(localStorage.getItem(PFKEY)||'null');
+  if(pr&&pr.text){ pf=pr; pfReparse(); }
+}catch(e){ pf=null }
+pfRender();
 
 /* Flikar */
 var TABS=[].slice.call(document.querySelectorAll('#tabs .tab'));
