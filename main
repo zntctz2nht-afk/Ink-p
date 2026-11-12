@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renton Priskalkyl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700;800&family=Red+Hat+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: mörk vattenblå topp, klistrad resultatremsa, därefter arbetskort i en spalt (två på bred skärm). */
+:root{
+  --ink:#0c2a43;        /* djup vattenblå: topp, rubriker */
+  --accent:#0f7fc4;     /* klar vattenblå: handling, Rentons andel */
+  --aqua:#58c1d6;       /* ljus akva: återförsäljarens andel */
+  --bg:#eef3f7;         /* sval ljusgrå-blå bakgrund */
+  --surface:#ffffff;
+  --line:#d5dfe8;
+  --text:#11283a;
+  --muted:#5b7186;
+  --field:#f6f9fb;
+  --good:#1b8a5a; --warn:#b97a06; --crit:#c23a3a;
+  --good-bg:#e1f4ea; --warn-bg:#fbf0d6; --crit-bg:#fbe3e3;
+  --on-ink:#ffffff; --on-ink-muted:#a9c3d8;
+  --display:"Red Hat Display",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --body:"Red Hat Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ink:#081c2e; --accent:#3ea4e6; --aqua:#63c9dc; --bg:#0b1722; --surface:#11222f; --line:#23394a;
+    --text:#e4eef5; --muted:#8fa6b8; --field:#0c1a26;
+    --good:#4cc38c; --warn:#e2ad3f; --crit:#ef7676;
+    --good-bg:#12382a; --warn-bg:#3a2e10; --crit-bg:#3f1c1c;
+    --on-ink:#ffffff; --on-ink-muted:#9bb7cc;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ink:#081c2e; --accent:#3ea4e6; --aqua:#63c9dc; --bg:#0b1722; --surface:#11222f; --line:#23394a;
+  --text:#e4eef5; --muted:#8fa6b8; --field:#0c1a26;
+  --good:#4cc38c; --warn:#e2ad3f; --crit:#ef7676;
+  --good-bg:#12382a; --warn-bg:#3a2e10; --crit-bg:#3f1c1c;
+  --on-ink:#ffffff; --on-ink-muted:#9bb7cc;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:16px;line-height:1.45;font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.top{background:var(--ink);color:var(--on-ink);padding:20px 16px 18px}
+.top-in,.wrap,.sum-in{max-width:1080px;margin:0 auto}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand b{font-family:var(--display);font-weight:800;font-size:26px;letter-spacing:-.02em}
+.brand span{font-family:var(--display);font-weight:600;color:var(--on-ink-muted);font-size:15px;letter-spacing:.08em;text-transform:uppercase}
+.namerow{margin-top:14px;display:flex;gap:10px;flex-wrap:wrap}
+.namerow input{flex:1 1 220px;min-width:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:var(--on-ink);border-radius:10px;padding:10px 12px;font-weight:500}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{background:transparent;border-color:rgba(255,255,255,.3);color:var(--on-ink)}
+.btn.small{padding:6px 10px;font-size:14px}
+
+.sum{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px}
+.sum-in{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 14px}
+.sum .k{font-size:12px;color:var(--muted);white-space:nowrap}
+.sum .v{font-family:var(--display);font-weight:700;font-size:19px;white-space:nowrap}
+.sum .v small{font-size:12px;font-weight:600;color:var(--muted)}
+@media (max-width:520px){.sum-in{grid-template-columns:repeat(2,1fr)}.sum .v{font-size:18px}}
+.pill{display:inline-block;font-family:var(--body);font-size:12px;font-weight:600;border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.crit{background:var(--crit-bg);color:var(--crit)}
+
+.wrap{padding:18px 16px 48px;display:grid;gap:16px;grid-template-columns:1fr}
+@media (min-width:900px){.wrap{grid-template-columns:1fr 1fr;align-items:start}.wide{grid-column:1 / -1}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 16px;min-width:0}
+.card h2{font-size:19px;color:var(--text)}
+.card .lead{color:var(--muted);font-size:14px;margin:4px 0 14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid .full{grid-column:1 / -1}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:500;min-width:0}
+.inp{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:10px;background:var(--field);overflow:hidden}
+.inp:focus-within{border-color:var(--accent)}
+.inp input,.inp select{border:0;background:transparent;padding:10px 10px;min-width:0;width:100%;font-weight:600;color:var(--text);outline:0}
+.inp select{width:auto;flex:0 0 auto;border-left:1px solid var(--line);font-weight:600;padding-right:6px}
+.inp .u{display:flex;align-items:center;padding:0 10px;color:var(--muted);font-size:13px;border-left:1px solid var(--line);white-space:nowrap}
+.inp.calc{background:var(--surface);border-style:dashed}
+.rows{margin:16px 0 0;padding:0;list-style:none;border-top:1px solid var(--line)}
+.rows li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}
+.rows li span:first-child{color:var(--muted)}
+.rows li.tot{font-weight:700;font-family:var(--display);font-size:17px;border-bottom:0}
+.rows li.tot span:first-child{color:var(--text)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;font-size:13px;color:var(--muted)}
+
+.bar{display:flex;height:34px;border-radius:8px;overflow:hidden;margin-top:18px;background:var(--line)}
+.bar div{min-width:0;transition:flex-basis .2s}
+@media (prefers-reduced-motion:reduce){.bar div{transition:none}}
+.seg-cost{background:var(--ink)}.seg-tb{background:var(--accent)}.seg-af{background:var(--aqua)}.seg-vat{background:var(--muted);opacity:.45}
+:root[data-theme="dark"] .seg-cost{background:#2a4a66}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .seg-cost{background:#2a4a66}}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-top:10px;font-size:13px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.legend b{font-weight:600}
+
+.scroll{overflow-x:auto;margin-top:12px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:12px}
+th:first-child,td:first-child{text-align:left}
+tr.now td{background:var(--field);font-weight:700}
+tr.pick{cursor:pointer}
+tr.pick:hover td{background:var(--field)}
+td.neg{color:var(--crit)} td.ok{color:var(--good)}
+td input{width:92px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:6px 8px;text-align:right;font-weight:600}
+.note{font-size:13px;color:var(--muted);margin-top:10px}
+.big{font-family:var(--display);font-weight:700;font-size:24px;margin-top:12px;overflow-wrap:anywhere}
+.empty{color:var(--muted);font-size:14px;padding:10px 0}
+.linkbtn{background:none;border:0;color:var(--accent);font-weight:600;cursor:pointer;padding:4px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><b>Renton</b><span>Priskalkyl</span></div>
+    <div class="namerow">
+      <input id="name" data-k="name" data-text="1" aria-label="Produktnamn" placeholder="Produktnamn">
+      <button class="btn primary" id="save" type="button">Spara kalkyl</button>
+      <button class="btn ghost" id="copy" type="button">Kopiera sammanfattning</button>
+    </div>
+  </div>
+</header>
+
+<div class="sum" aria-live="polite">
+  <div class="sum-in">
+    <div><div class="k">Självkostnad</div><div class="v"><span id="s-cost"></span> <small>kr</small></div></div>
+    <div><div class="k">ÅF-pris netto</div><div class="v"><span id="s-n"></span> <small>kr</small></div></div>
+    <div><div class="k">Täckningsgrad</div><div class="v"><span id="s-tg"></span> <small>%</small><span id="s-pill" class="pill"></span></div></div>
+    <div><div class="k">TB per styck</div><div class="v"><span id="s-tb"></span> <small>kr</small></div></div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <section class="card">
+    <h2>Inköp och hemtagning</h2>
+    <p class="lead">Från leverantörens pris till vad varan kostar på lagret i Ransta.</p>
+    <div class="grid">
+      <label class="f full">Inköpspris per styck
+        <span class="inp"><input id="price" data-k="price" inputmode="decimal">
+          <select id="cur" data-k="cur" aria-label="Inköpsvaluta"></select></span></label>
+      <label class="f">Antal i ordern
+        <span class="inp"><input id="qty" data-k="qty" inputmode="decimal"><span class="u">st</span></span></label>
+      <label class="f">Leverantörsrabatt
+        <span class="inp"><input id="supDisc" data-k="supDisc" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f full">Frakt för hela ordern
+        <span class="inp"><input id="freight" data-k="freight" inputmode="decimal">
+          <select id="freightCur" data-k="freightCur" aria-label="Fraktvaluta"></select></span></label>
+      <label class="f">Tull
+        <span class="inp"><input id="duty" data-k="duty" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f">Övrigt per styck
+        <span class="inp"><input id="other" data-k="other" inputmode="decimal"><span class="u">kr</span></span></label>
+      <label class="f">Omkostnadspåslag
+        <span class="inp"><input id="overhead" data-k="overhead" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f">Valutapåslag (buffert)
+        <span class="inp"><input id="fxBuf" data-k="fxBuf" inputmode="decimal"><span class="u">%</span></span></label>
+    </div>
+    <ul class="rows">
+      <li><span>Vara <em id="b-rate" style="font-style:normal"></em></span><span id="b-goods"></span></li>
+      <li><span>Frakt per styck</span><span id="b-freight"></span></li>
+      <li><span>Tull (på vara + frakt)</span><span id="b-duty"></span></li>
+      <li><span>Övrigt</span><span id="b-other"></span></li>
+      <li><span>Omkostnader</span><span id="b-oh"></span></li>
+      <li class="tot"><span>Självkostnad per styck</span><span id="b-cost"></span></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Prissättning</h2>
+    <p class="lead">Ändra vilket fält du vill. Övriga räknas om. Alla priser är exklusive moms om inget annat står.</p>
+    <div class="grid">
+      <label class="f">ÅF-pris netto
+        <span class="inp"><input id="N" inputmode="decimal"><span class="u">kr</span></span></label>
+      <label class="f">Täckningsgrad
+        <span class="inp"><input id="tg" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f">Påslag på självkostnad
+        <span class="inp"><input id="markup" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f">Kampanjrabatt till ÅF
+        <span class="inp"><input id="campaign" data-k="campaign" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f">Rek. konsumentpris
+        <span class="inp"><input id="Rex" inputmode="decimal"><span class="u">kr</span></span></label>
+      <label class="f">Konsumentpris inkl. moms
+        <span class="inp"><input id="Rin" inputmode="decimal"><span class="u">kr</span></span></label>
+      <label class="f">ÅF-rabatt på konsumentpris
+        <span class="inp"><input id="d" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f">Moms
+        <span class="inp"><input id="vat" data-k="vat" inputmode="decimal"><span class="u">%</span></span></label>
+      <label class="f full">Mål för täckningsgrad
+        <span class="inp"><input id="targetTG" data-k="targetTG" inputmode="decimal"><span class="u">%</span></span></label>
+    </div>
+    <div class="chips">Avrunda konsumentpris inkl. moms:
+      <button class="btn small" type="button" data-round="10">jämn tia</button>
+      <button class="btn small" type="button" data-round="90">…90</button>
+      <button class="btn small" type="button" data-round="95">…95</button>
+      <button class="btn small" type="button" data-round="100">jämnt hundratal</button>
+    </div>
+
+    <div class="bar" role="img" aria-label="Fördelning av konsumentpriset inklusive moms">
+      <div class="seg-cost" id="g-cost"></div><div class="seg-tb" id="g-tb"></div><div class="seg-af" id="g-af"></div><div class="seg-vat" id="g-vat"></div>
+    </div>
+    <div class="legend">
+      <div><i class="seg-cost"></i>Självkostnad <b id="l-cost"></b></div>
+      <div><i class="seg-tb"></i>Rentons TB <b id="l-tb"></b></div>
+      <div><i class="seg-af"></i>ÅF:s marginal <b id="l-af"></b></div>
+      <div><i class="seg-vat"></i>Moms <b id="l-vat"></b></div>
+    </div>
+
+    <ul class="rows">
+      <li><span>ÅF-pris efter kampanjrabatt</span><span id="p-neff"></span></li>
+      <li><span>ÅF:s marginal vid rek. pris</span><span id="p-af"></span></li>
+      <li><span>Rentons marginal vid direktförsäljning</span><span id="p-direct"></span></li>
+      <li><span>Lägsta ÅF-pris för att nå målet</span><span id="p-floor"></span></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Prisstege</h2>
+    <p class="lead">Testa olika ÅF-priser runt det nuvarande. Tryck på en rad för att använda priset.</p>
+    <div class="grid">
+      <label class="f">Steg
+        <span class="inp"><select id="step" data-k="step" style="border-left:0;width:100%">
+          <option value="2.5">2,5 %</option><option value="5">5 %</option><option value="10">10 %</option></select></span></label>
+      <label class="f">Volym per år
+        <span class="inp"><input id="vol" data-k="vol" inputmode="decimal"><span class="u">st</span></span></label>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>ÅF-pris</th><th>ÅF-rabatt</th><th>TG</th><th>TB/st</th><th>TB/år</th></tr></thead>
+      <tbody id="ladder"></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Valutakänslighet</h2>
+    <p class="lead" id="fx-lead"></p>
+    <div class="scroll"><table>
+      <thead><tr><th>Kurs</th><th id="fx-h">kr</th><th>Självkostnad</th><th>TB/st</th><th>TG</th></tr></thead>
+      <tbody id="fx"></tbody></table></div>
+    <p class="note" id="fx-note"></p>
+  </section>
+
+  <section class="card">
+    <h2>Valutaväxlare</h2>
+    <p class="lead">Räkna om ett belopp mellan valfria valutor med kurserna nedan.</p>
+    <div class="grid">
+      <label class="f full">Belopp
+        <span class="inp"><input id="cvAmt" data-k="cvAmt" inputmode="decimal">
+          <select id="cvFrom" data-k="cvFrom" aria-label="Från valuta"></select></span></label>
+      <label class="f full">Till
+        <span class="inp"><select id="cvTo" data-k="cvTo" style="border-left:0;width:100%"></select></span></label>
+    </div>
+    <div class="big" id="cvOut"></div>
+    <p class="note" id="cvNote"></p>
+  </section>
+
+  <section class="card">
+    <h2>Valutakurser</h2>
+    <p class="lead">Kronor per en enhet utländsk valuta. Startvärdena är riktkurser från den 10–11 november 2026. Skriv in dagens kurs eller den kurs banken ger dig.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Valuta</th><th>Kurs (kr)</th><th>Med påslag</th></tr></thead>
+      <tbody id="rates"></tbody></table></div>
+    <p class="note">Sidan kan inte hämta kurser automatiskt. Ändringar här slår igenom direkt i hela kalkylen.</p>
+  </section>
+
+  <section class="card wide">
+    <h2>Sparade kalkyler</h2>
+    <p class="lead">Jämför produkter eller prisnivåer sida vid sida. Sparas i den här webbläsaren.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Namn</th><th>Självkostnad</th><th>ÅF-pris</th><th>Konsument inkl.</th><th>TG</th><th>TB/st</th><th></th></tr></thead>
+      <tbody id="saved"></tbody></table></div>
+    <div class="empty" id="saved-empty">Inga sparade kalkyler än. Tryck på Spara kalkyl högst upp.</div>
+  </section>
+</main>
+
+<script>
+(function(){
+'use strict';
+var KEY='renton-priskalkyl-v1';
+var CURS=['EUR','USD','CNY','GBP','NOK','DKK'];
+var DEF={name:'Avhärdare 20 L med WiFi-ventil (exempel)',price:285,cur:'EUR',qty:50,supDisc:0,freight:6500,freightCur:'SEK',
+  duty:0,other:35,overhead:5,fxBuf:2,N:5490,R:7996,campaign:0,vat:25,targetTG:35,step:'5',vol:120,
+  cvAmt:1000,cvFrom:'EUR',cvTo:'SEK',
+  rates:{EUR:11.051,USD:9.9317,CNY:1.4889,GBP:13.1558,NOK:1.0354,DKK:1.4814}};
+var s=JSON.parse(JSON.stringify(DEF)), saved=[];
+try{
+  var raw=JSON.parse(localStorage.getItem(KEY)||'null');
+  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; }
+}catch(e){}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved}))}catch(e){}}
+
+var $=function(id){return document.getElementById(id)};
+function num(v){var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.'));return isFinite(n)?n:0}
+function fmt(n,d){d=d||0;return isFinite(n)?n.toLocaleString('sv-SE',{minimumFractionDigits:d,maximumFractionDigits:d}):'–'}
+function kr(n){return fmt(n)+' kr'}
+function pct(n){return fmt(n*100,1)+' %'}
+function plain(n,d){return isFinite(n)?String(Math.round(n*Math.pow(10,d))/Math.pow(10,d)).replace('.',','):''}
+
+/* Kärnan: m är en faktor på alla valutakurser, används för känslighetsanalysen. */
+function calc(st,m){
+  if(m===undefined)m=1;
+  var rate=function(c){return c==='SEK'?1:(st.rates[c]||0)*(1+st.fxBuf/100)*m};
+  var qty=st.qty>0?st.qty:1;
+  var goods=st.price*(1-st.supDisc/100)*rate(st.cur);
+  var freight=st.freight*rate(st.freightCur)/qty;
+  var duty=(goods+freight)*st.duty/100;
+  var sub=goods+freight+duty+st.other;
+  var oh=sub*st.overhead/100;
+  var cost=sub+oh;
+  var neff=st.N*(1-st.campaign/100);
+  var tb=neff-cost;
+  var vat=st.vat/100;
+  return {rate:rate(st.cur),goods:goods,freight:freight,duty:duty,oh:oh,cost:cost,neff:neff,tb:tb,
+    tg:neff>0?tb/neff:NaN, markup:cost>0?tb/cost:NaN,
+    d:st.R>0?1-st.N/st.R:NaN, af:st.R>0?(st.R-neff)/st.R:NaN, afKr:st.R-neff,
+    direct:st.R>0?(st.R-cost)/st.R:NaN, rin:st.R*(1+vat), vatKr:st.R*vat,
+    floor:cost/(1-Math.min(st.targetTG,99.9)/100)/(1-Math.min(st.campaign,99.9)/100)};
+}
+
+function opts(el,list){el.innerHTML=list.map(function(c){return '<option>'+c+'</option>'}).join('')}
+opts($('cur'),CURS.concat('SEK')); opts($('freightCur'),['SEK'].concat(CURS));
+opts($('cvFrom'),CURS.concat('SEK')); opts($('cvTo'),['SEK'].concat(CURS));
+
+function fill(){ /* skriver tillståndet till inmatningsfälten */
+  document.querySelectorAll('[data-k]').forEach(function(el){
+    var v=s[el.dataset.k];
+    el.value=(el.tagName==='SELECT'||el.dataset.text)?v:plain(v,4);
+  });
+  $('rates').innerHTML=CURS.map(function(c){
+    return '<tr><td>'+c+'</td><td><input id="rate-'+c+'" data-rate="'+c+'" inputmode="decimal" aria-label="Kurs '+c+'" value="'+plain(s.rates[c],4)+'"></td><td id="eff-'+c+'"></td></tr>';
+  }).join('');
+}
+function setIn(id,v){var el=$(id); if(document.activeElement!==el) el.value=v}
+function txt(id,v){$(id).textContent=v}
+
+function render(){
+  var c=calc(s);
+  txt('s-cost',fmt(c.cost)); txt('s-n',fmt(s.N)); txt('s-tg',fmt(c.tg*100,1)); txt('s-tb',fmt(c.tb));
+  var p=$('s-pill'), t=s.targetTG/100;
+  if(c.tb<0){p.className='pill crit';p.textContent='Förlust'}
+  else if(c.tg<t){p.className='pill warn';p.textContent='Under mål'}
+  else{p.className='pill good';p.textContent='Når målet'}
+
+  txt('b-rate',s.cur==='SEK'?'':'à '+fmt(c.rate,4)+' kr/'+s.cur);
+  txt('b-goods',kr(c.goods)); txt('b-freight',kr(c.freight)); txt('b-duty',kr(c.duty));
+  txt('b-other',kr(s.other)); txt('b-oh',kr(c.oh)); txt('b-cost',kr(c.cost));
+
+  setIn('N',plain(s.N,0)); setIn('tg',plain(c.tg*100,1)); setIn('markup',plain(c.markup*100,1));
+  setIn('Rex',plain(s.R,0)); setIn('Rin',plain(c.rin,0)); setIn('d',plain(c.d*100,1));
+
+  var tot=Math.max(c.rin,1), seg=function(id,v){$(id).style.flex='0 0 '+Math.max(0,Math.min(100,v/tot*100))+'%'};
+  seg('g-cost',Math.min(c.cost,c.rin)); seg('g-tb',c.tb); seg('g-af',c.afKr); seg('g-vat',c.vatKr);
+  txt('l-cost',kr(c.cost)); txt('l-tb',kr(c.tb)); txt('l-af',kr(c.afKr)); txt('l-vat',kr(c.vatKr));
+
+  txt('p-neff',kr(c.neff)); txt('p-af',pct(c.af)+' · '+kr(c.afKr));
+  txt('p-direct',pct(c.direct)+' · '+kr(s.R-c.cost)); txt('p-floor',kr(c.floor));
+
+  /* Prisstege */
+  var step=num(s.step)/100, rows='';
+  for(var i=-3;i<=3;i++){
+    var st=Object.assign({},s,{N:s.N*(1+i*step)}), x=calc(st);
+    rows+='<tr class="'+(i===0?'now':'pick')+'" data-n="'+st.N+'" tabindex="'+(i===0?-1:0)+'"><td>'+kr(st.N)+(i?' <span style="color:var(--muted);font-weight:400">'+(i>0?'+':'−')+fmt(Math.abs(i*step*100),1)+' %</span>':'')+'</td><td>'+pct(x.d)+'</td><td class="'+(x.tb<0?'neg':x.tg>=t?'ok':'')+'">'+pct(x.tg)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+kr(x.tb)+'</td><td>'+kr(x.tb*s.vol)+'</td></tr>';
+  }
+  $('ladder').innerHTML=rows;
+
+  /* Valutakänslighet */
+  var hasFx=s.cur!=='SEK'||(s.freightCur!=='SEK'&&s.freight>0);
+  var lead=s.cur!=='SEK'?s.cur:s.freightCur;
+  txt('fx-h',hasFx?'kr/'+lead:'kr');
+  txt('fx-lead',hasFx?'Så påverkas marginalen om kronan rör sig mot '+lead+' medan ÅF-priset ligger kvar på '+kr(s.N)+'.':'Inköpet är i kronor, så marginalen påverkas inte av valutakursen.');
+  rows='';
+  [-10,-5,0,5,10].forEach(function(dv){
+    var x=calc(s,1+dv/100);
+    rows+='<tr class="'+(dv===0?'now':'')+'"><td>'+(dv===0?'Idag':(dv>0?'+':'−')+Math.abs(dv)+' %')+'</td><td>'+(hasFx?fmt((s.rates[lead]||0)*(1+s.fxBuf/100)*(1+dv/100),3):'–')+'</td><td>'+kr(x.cost)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+kr(x.tb)+'</td><td class="'+(x.tb<0?'neg':x.tg>=t?'ok':'')+'">'+pct(x.tg)+'</td></tr>';
+  });
+  $('fx').innerHTML=rows;
+  var a=calc(s,0).cost, b=c.cost-a, note='';
+  if(hasFx&&b>0){
+    var m0=(c.neff-a)/b-1, mt=(c.neff*(1-t)-a)/b-1;
+    note=(m0>0?'Valutan kan bli '+fmt(m0*100,1)+' % dyrare innan täckningsbidraget är noll.':'Täckningsbidraget är redan noll eller negativt vid dagens kurs.')+' '+
+         (mt>0?'Målet på '+fmt(s.targetTG,0)+' % håller upp till '+fmt(mt*100,1)+' % dyrare valuta.':'Målet på '+fmt(s.targetTG,0)+' % kräver '+fmt(-mt*100,1)+' % billigare valuta eller högre pris.');
+  }
+  txt('fx-note',note);
+
+  /* Växlare och kurser */
+  var r=function(cu){return cu==='SEK'?1:(s.rates[cu]||0)};
+  var out=r(s.cvTo)>0?s.cvAmt*r(s.cvFrom)/r(s.cvTo):NaN;
+  txt('cvOut',fmt(s.cvAmt,2)+' '+s.cvFrom+' = '+fmt(out,2)+' '+s.cvTo);
+  txt('cvNote',s.cvFrom!==s.cvTo&&r(s.cvFrom)>0?'1 '+s.cvFrom+' = '+fmt(r(s.cvFrom)/r(s.cvTo),4)+' '+s.cvTo+'. Med valutapåslaget på '+fmt(s.fxBuf,1)+' %: '+fmt(out*(1+s.fxBuf/100),2)+' '+s.cvTo+'.':'');
+  CURS.forEach(function(cu){txt('eff-'+cu,fmt(s.rates[cu]*(1+s.fxBuf/100),4))});
+
+  /* Sparade */
+  $('saved-empty').style.display=saved.length?'none':'block';
+  $('saved').innerHTML=saved.map(function(it,i){
+    var x=calc(it);
+    return '<tr><td style="white-space:normal;min-width:140px">'+esc(it.name||'Namnlös')+'</td><td>'+kr(x.cost)+'</td><td>'+kr(it.N)+'</td><td>'+kr(x.rin)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+pct(x.tg)+'</td><td>'+kr(x.tb)+'</td><td><button class="linkbtn" type="button" data-load="'+i+'">Öppna</button><button class="linkbtn" type="button" data-del="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>';
+  }).join('');
+  persist();
+}
+function esc(t){return String(t).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]})}
+
+/* Händelser */
+document.addEventListener('input',function(e){
+  var el=e.target, k=el.dataset&&el.dataset.k;
+  if(k){ s[k]=(el.tagName==='SELECT'||el.dataset.text)?el.value:num(el.value); render(); return; }
+  if(el.dataset&&el.dataset.rate){ s.rates[el.dataset.rate]=num(el.value); render(); return; }
+  var v=num(el.value), c=calc(s), camp=1-Math.min(s.campaign,99.9)/100;
+  switch(el.id){
+    case 'N': s.N=v; break;
+    case 'tg': if(v<100) s.N=c.cost/(1-v/100)/camp; break;
+    case 'markup': s.N=c.cost*(1+v/100)/camp; break;
+    case 'd': s.N=s.R*(1-v/100); break;
+    case 'Rex': s.R=v; break;
+    case 'Rin': s.R=v/(1+s.vat/100); break;
+    default: return;
+  }
+  render();
+});
+document.addEventListener('change',function(e){ if(e.target.tagName==='SELECT') e.target.dispatchEvent(new Event('input',{bubbles:true})); });
+document.addEventListener('focusout',function(){ setTimeout(render,0); });
+
+function pickRow(tr){ if(tr&&tr.classList.contains('pick')){ s.N=Math.round(parseFloat(tr.dataset.n)); render(); } }
+$('ladder').addEventListener('click',function(e){pickRow(e.target.closest('tr'))});
+$('ladder').addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();pickRow(e.target.closest('tr'))} });
+
+document.querySelectorAll('[data-round]').forEach(function(b){
+  b.addEventListener('click',function(){
+    var m=+b.dataset.round, x=calc(s).rin, y;
+    if(m===10) y=Math.round(x/10)*10;
+    else if(m===100) y=Math.round(x/100)*100;
+    else y=Math.round((x-m)/100)*100+m;
+    s.R=y/(1+s.vat/100); render();
+  });
+});
+
+$('save').addEventListener('click',function(){
+  var snap=JSON.parse(JSON.stringify(s));
+  var i=saved.findIndex(function(it){return it.name===snap.name});
+  if(i>=0) saved[i]=snap; else saved.push(snap);
+  render(); flash(this,'Sparad');
+});
+$('saved').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.load!==undefined){ s=JSON.parse(JSON.stringify(saved[+b.dataset.load])); fill(); render(); window.scrollTo({top:0}); }
+  else if(b.dataset.del!==undefined){ saved.splice(+b.dataset.del,1); render(); }
+});
+$('copy').addEventListener('click',function(){
+  var c=calc(s), btn=this;
+  var t=[s.name,
+    'Inköp: '+fmt(s.price,2)+' '+s.cur+(s.cur==='SEK'?'':' à '+fmt(c.rate,4)+' kr'),
+    'Självkostnad: '+kr(c.cost),
+    'ÅF-pris netto: '+kr(s.N)+(s.campaign?' (efter kampanjrabatt '+kr(c.neff)+')':''),
+    'TB: '+kr(c.tb)+' · TG: '+pct(c.tg)+' · Påslag: '+pct(c.markup),
+    'Rek. konsumentpris: '+kr(s.R)+' exkl. moms, '+kr(c.rin)+' inkl. moms',
+    'ÅF-rabatt: '+pct(c.d)+' · ÅF:s marginal: '+pct(c.af)].join('\n');
+  try{ navigator.clipboard.writeText(t).then(function(){flash(btn,'Kopierad')},function(){flash(btn,'Gick inte att kopiera')}); }
+  catch(e){ flash(btn,'Gick inte att kopiera'); }
+});
+function flash(b,msg){var o=b.dataset.o||(b.dataset.o=b.textContent); b.textContent=msg; setTimeout(function(){b.textContent=o},1400)}
+
+fill(); render();
+})();
+</script>
+</body>
+</html>
