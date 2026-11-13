@@ -97,6 +97,9 @@ button,input,select{font:inherit;color:inherit}
 [hidden]{display:none!important}
 td.txt{text-align:left;white-space:normal;min-width:160px}
 td.chg{font-weight:600}
+tr.main td{border-bottom:0;padding-bottom:4px}
+tr.noterow td{padding-top:0;padding-bottom:12px}
+td textarea{font:inherit;font-size:14px;color:inherit;width:100%;max-width:640px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:6px 8px;resize:vertical;line-height:1.35;display:block;white-space:pre-wrap}
 td input.tin{width:100%;min-width:200px;text-align:left}
 td input.nin{width:120px;text-align:left}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
@@ -1264,13 +1267,14 @@ function evmSummary(){
 function evmRender(){
   var pv=function(v){return typeof v==='number'?plain(v,2):''};
   $('evm-body').innerHTML=evm.map(function(it,i){
-    return '<tr><td><input class="nin" data-evm="'+i+'" data-f="nr" aria-label="Artikelnummer" value="'+esc(it.nr||'')+'"></td>'+
+    return '<tr class="main"><td><input class="nin" data-evm="'+i+'" data-f="nr" aria-label="Artikelnummer" value="'+esc(it.nr||'')+'"></td>'+
       '<td class="txt"><input class="tin" data-evm="'+i+'" data-f="name" aria-label="Benämning" placeholder="Benämning" value="'+esc(it.name||'')+'"></td>'+
       '<td><input class="nin" style="width:160px" data-evm="'+i+'" data-f="sup" aria-label="Leverantör" value="'+esc(it.sup||'')+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="cost" inputmode="decimal" aria-label="Inköpspris" value="'+pv(it.cost)+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="price" inputmode="decimal" aria-label="Försäljningspris" value="'+pv(it.price)+'"></td>'+
       '<td id="evm-tb-'+i+'"></td><td id="evm-tg-'+i+'"></td>'+
-      '<td><button class="linkbtn" type="button" data-evmdel="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>';
+      '<td><button class="linkbtn" type="button" data-evmdel="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>'+
+      '<tr class="noterow"><td colspan="8"><textarea rows="'+Math.min(6,Math.max(1,String(it.note||'').split('\n').length))+'" data-evm="'+i+'" data-f="note" aria-label="Kommentar" placeholder="Kommentar eller anteckning om artikeln">'+esc(it.note||'')+'</textarea></td></tr>';
   }).join('');
   evm.forEach(function(it,i){evmCells(i)});
   evmSummary();
@@ -1282,22 +1286,22 @@ function download(blob,fn){
 $('panel-evm').addEventListener('input',function(e){
   var el=e.target; if(el.dataset.evm===undefined) return;
   var i=+el.dataset.evm, f=el.dataset.f;
-  evm[i][f]=(f==='nr'||f==='name'||f==='sup')?el.value:(el.value.trim()===''?null:num(el.value));
+  evm[i][f]=(f==='nr'||f==='name'||f==='sup'||f==='note')?el.value:(el.value.trim()===''?null:num(el.value));
   evmCells(i); evmSummary(); persist();
 });
 $('panel-evm').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
   if(b.id==='evm-add'){
-    evm.push({nr:'',name:'',sup:'',cost:null,price:null}); evmRender(); persist();
+    evm.push({nr:'',name:'',sup:'',cost:null,price:null,note:''}); evmRender(); persist();
     var inp=document.querySelector('[data-evm="'+(evm.length-1)+'"][data-f="name"]'); if(inp) inp.focus();
   }else if(b.dataset.evmdel!==undefined){
     var it=evm[+b.dataset.evmdel];
-    if((it.name||it.nr||it.sup||it.cost!=null||it.price!=null)&&!confirm('Ta bort '+(it.name||it.nr||'artikeln')+'?')) return;
+    if((it.name||it.nr||it.sup||it.note||it.cost!=null||it.price!=null)&&!confirm('Ta bort '+(it.name||it.nr||'artikeln')+'?')) return;
     evm.splice(+b.dataset.evmdel,1); evmRender(); persist();
   }else if(b.id==='evm-xlsx'){
     var S=function(v){return {v:v||'',n:false}}, N=function(v){return typeof v==='number'&&isFinite(v)?{v:Math.round(v*10000)/10000,n:true}:{v:'',n:false}};
-    var rows=[['Artikelnummer','Benämning','Leverantör','Inköpspris','Försäljningspris','TB','TG %'].map(S)];
-    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),S(it.sup),N(it.cost),N(it.price),N(x.tb),N(x.tg*100)]); });
+    var rows=[['Artikelnummer','Benämning','Leverantör','Inköpspris','Försäljningspris','TB','TG %','Kommentar'].map(S)];
+    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),S(it.sup),N(it.cost),N(it.price),N(x.tb),N(x.tg*100),S(it.note)]); });
     download(xlsxWrite(rows,'EVM'),'evm-artiklar.xlsx');
   }
 });
