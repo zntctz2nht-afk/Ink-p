@@ -97,6 +97,15 @@ button,input,select{font:inherit;color:inherit}
 [hidden]{display:none!important}
 td.txt{text-align:left;white-space:normal;min-width:160px}
 td.chg{font-weight:600}
+.files{list-style:none;margin:12px 0 0;padding:0;border-top:1px solid var(--line)}
+.files li{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.files li.on{background:var(--field)}
+.files .fn{font-weight:600;flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+.files .meta{color:var(--muted);font-size:13px}
+.cardhead{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between}
+#sup-list{display:grid;gap:16px;grid-column:1 / -1;min-width:0}
+#sup-list td{text-align:left;white-space:normal;max-width:420px}
+#sup-list td.num{text-align:right;white-space:nowrap}
 tr.main td{border-bottom:0;padding-bottom:4px}
 tr.noterow td{padding-top:0;padding-bottom:12px}
 td textarea{font:inherit;font-size:14px;color:inherit;width:100%;max-width:640px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:6px 8px;resize:vertical;line-height:1.35;display:block;white-space:pre-wrap}
@@ -192,6 +201,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <button class="tab" type="button" role="tab" id="tab-valuta" data-tab="valuta" aria-controls="panel-valuta">Valuta</button>
     <button class="tab" type="button" role="tab" id="tab-prisfil" data-tab="prisfil" aria-controls="panel-prisfil">Prisfil<span class="count" id="pf-count"></span></button>
     <button class="tab" type="button" role="tab" id="tab-evm" data-tab="evm" aria-controls="panel-evm">EVM<span class="count" id="evm-count"></span></button>
+    <button class="tab" type="button" role="tab" id="tab-lev" data-tab="lev" aria-controls="panel-lev">Leverantörer<span class="count" id="sup-count"></span></button>
     <button class="tab" type="button" role="tab" id="tab-sparade" data-tab="sparade" aria-controls="panel-sparade">Sparade<span class="count" id="saved-count"></span></button>
   </div>
 </nav>
@@ -461,6 +471,20 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <p class="note" id="evm-sum" aria-live="polite"></p>
   </section>
 </div>
+
+<div class="wrap panel" role="tabpanel" id="panel-lev" aria-labelledby="tab-lev" hidden>
+  <section class="card wide">
+    <h2>Leverantörer</h2>
+    <p class="lead">Lägg upp en sektion per leverantör och ladda upp deras prislistor i PDF eller Excel. Innehållet läses in som en lista, och originalfilen sparas så att du kan öppna den igen. Allt lagras i den här webbläsaren.</p>
+    <div class="namerow" style="margin-top:0">
+      <span class="inp" style="flex:1 1 220px"><input id="sup-new" aria-label="Leverantörens namn" placeholder="Leverantörens namn"></span>
+      <button class="btn primary" type="button" id="sup-add">Lägg till leverantör</button>
+    </div>
+    <p class="note" id="sup-status" aria-live="polite"></p>
+  </section>
+  <div id="sup-list"></div>
+</div>
+<datalist id="sup-names"></datalist>
 
 <div class="wrap panel" role="tabpanel" id="panel-sparade" aria-labelledby="tab-sparade" hidden>
   <section class="card wide">
@@ -1267,6 +1291,221 @@ $('fx-auto').checked=fxm.auto!==false;
 $('fx-auto').addEventListener('change',function(){ fxm.auto=this.checked; persist(); });
 fxStatus();
 
+/* Leverantörer: en sektion per leverantör med uppladdade prislistor. Listor och originalfiler ligger i IndexedDB. */
+var sups=[], supUi={}, supDb=null, supDbFail=false;
+function idbOpen(){
+  if(supDb) return Promise.resolve(supDb);
+  return new Promise(function(res,rej){
+    var rq; try{ rq=indexedDB.open('renton-leverantorer',1); }catch(e){ rej(e); return; }
+    rq.onupgradeneeded=function(){ rq.result.createObjectStore('kv'); };
+    rq.onsuccess=function(){ supDb=rq.result; res(supDb); };
+    rq.onerror=function(){ rej(rq.error); };
+  });
+}
+function idbDo(mode,fn){
+  return idbOpen().then(function(db){ return new Promise(function(res,rej){
+    var tx=db.transaction('kv',mode), rq=fn(tx.objectStore('kv'));
+    tx.oncomplete=function(){ res(rq&&rq.result); }; tx.onerror=tx.onabort=function(){ rej(tx.error); };
+  }); });
+}
+function supSave(){
+  return idbDo('readwrite',function(st){return st.put(sups,'suppliers')}).then(function(){supDbFail=false},function(){supDbFail=true}).then(supStatus);
+}
+function supStatus(msg){
+  txt('sup-status',msg||(supDbFail?'Webbläsaren tillåter inte lagring här, så leverantörer och filer försvinner när sidan stängs.':''));
+}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+function supFind(sid){for(var i=0;i<sups.length;i++) if(sups[i].id===sid) return sups[i]; return null}
+function supUiOf(sid){return supUi[sid]||(supUi[sid]={open:null,q:'',limit:100,msg:''})}
+function fmtSize(n){return n>=1048576?fmt(n/1048576,1)+' MB':fmt(Math.max(1,Math.round(n/1024)))+' kB'}
+
+/* PDF-läsning: pdf.js laddas först när en PDF laddas upp, i första hand från mappen vendor bredvid sidan. */
+var pdfLoading=null;
+function pdfLib(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(pdfLoading) return pdfLoading;
+  var bases=['vendor/','https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/'];
+  var tryBase=function(i){
+    return new Promise(function(res,rej){
+      if(i>=bases.length){ rej(new Error('pdfjs')); return; }
+      var sc=document.createElement('script'); sc.src=bases[i]+'pdf.min.js';
+      sc.onload=function(){ if(window.pdfjsLib){ window.pdfjsLib.GlobalWorkerOptions.workerSrc=bases[i]+'pdf.worker.min.js'; res(window.pdfjsLib); } else tryBase(i+1).then(res,rej); };
+      sc.onerror=function(){ sc.remove(); tryBase(i+1).then(res,rej); };
+      document.head.appendChild(sc);
+    });
+  };
+  pdfLoading=tryBase(0); pdfLoading.catch(function(){pdfLoading=null});
+  return pdfLoading;
+}
+function pdfRows(buf){
+  return pdfLib().then(function(lib){ return lib.getDocument({data:new Uint8Array(buf)}).promise; }).then(function(doc){
+    var lines=[], chain=Promise.resolve();
+    var onePage=function(n){
+      return doc.getPage(n).then(function(pg){return pg.getTextContent()}).then(function(tc){
+        var items=tc.items.filter(function(it){return it.str&&it.str.trim()!==''}).map(function(it){
+          var h=it.height||Math.abs(it.transform[3])||10;
+          return {x:it.transform[4],y:it.transform[5],w:it.width||0,h:h,s:it.str};
+        });
+        items.sort(function(a,b){return b.y-a.y||a.x-b.x});
+        var cur=null, pageLines=[];
+        items.forEach(function(it){
+          if(!cur||Math.abs(cur.y-it.y)>Math.max(2,it.h*0.4)){ cur={y:it.y,items:[]}; pageLines.push(cur); }
+          cur.items.push(it);
+        });
+        pageLines.forEach(function(ln){
+          ln.items.sort(function(a,b){return a.x-b.x});
+          var cells=[], c=null;
+          ln.items.forEach(function(it){
+            var gap=c?it.x-c.x1:0;
+            if(c&&gap<it.h*0.9){ c.t+=(gap>it.h*0.15&&!/\s$/.test(c.t)?' ':'')+it.s; c.x1=Math.max(c.x1,it.x+it.w); }
+            else{ c={x0:it.x,x1:it.x+it.w,t:it.s}; cells.push(c); }
+          });
+          cells.forEach(function(c){c.t=c.t.replace(/\s+/g,' ').trim()});
+          lines.push(cells.filter(function(c){return c.t!==''}));
+        });
+      });
+    };
+    for(var n=1;n<=doc.numPages;n++) (function(n){ chain=chain.then(function(){return onePage(n)}); })(n);
+    return chain.then(function(){ return pdfColumns(lines.filter(function(l){return l.length})); });
+  });
+}
+function pdfColumns(lines){
+  /* kolumngränser = lodräta band där (nästan) ingen tabellrad har text */
+  var tab=lines.filter(function(l){return l.length>=2});
+  if(tab.length<3) return lines.map(function(l){return l.map(function(c){return c.t})});
+  var min=Infinity,max=-Infinity;
+  tab.forEach(function(l){l.forEach(function(c){min=Math.min(min,c.x0);max=Math.max(max,c.x1)})});
+  min=Math.floor(min); max=Math.ceil(max);
+  var cov=new Uint32Array(max-min+2);
+  tab.forEach(function(l){l.forEach(function(c){for(var x=Math.floor(c.x0)-min;x<=Math.ceil(c.x1)-min;x++)cov[x]++})});
+  var lim=Math.floor(tab.length*0.03), cuts=[], start=-1, x;
+  for(x=0;x<cov.length;x++){
+    if(cov[x]<=lim){ if(start<0) start=x; }
+    else{ if(start>0&&x-start>=3) cuts.push(min+(start+x)/2); start=-1; }
+  }
+  var colOf=function(c){var m=(c.x0+c.x1)/2,i=0;while(i<cuts.length&&m>cuts[i])i++;return i};
+  var rows=lines.map(function(l){
+    var r=[]; for(var i=0;i<=cuts.length;i++) r.push('');
+    l.forEach(function(c){var k=l.length===1?colOf({x0:c.x0,x1:c.x0}):colOf(c); r[k]=r[k]?r[k]+' '+c.t:c.t});
+    return r;
+  });
+  var keep=[]; for(var k=0;k<=cuts.length;k++) if(rows.some(function(r){return r[k]!==''})) keep.push(k);
+  return rows.map(function(r){return keep.map(function(k){return r[k]})});
+}
+function supParse(buf,name){
+  var b=new Uint8Array(buf);
+  if(b[0]===0x25&&b[1]===0x50&&b[2]===0x44&&b[3]===0x46) return pdfRows(buf.slice(0)).then(function(rows){return {kind:'PDF',rows:rows}});
+  if(b[0]===0x50&&b[1]===0x4B) return xlsxRead(b).then(function(r){return {kind:'Excel',rows:r.rows}});
+  if(b[0]===0xD0&&b[1]===0xCF) return Promise.reject(new Error('xls'));
+  var enc=pfDetectEnc(b), text=pfDecode(b,enc);
+  return Promise.resolve({kind:'Text',rows:pfParse(text,pfDetectDelim(text)).rows});
+}
+function supAddFiles(sid,files){
+  var sp=supFind(sid), ui=supUiOf(sid), list=[].slice.call(files), chain=Promise.resolve(), bad=[];
+  ui.msg='Läser in '+list.length+(list.length===1?' fil':' filer')+' …'; supRender();
+  list.forEach(function(f){
+    chain=chain.then(function(){
+      return f.arrayBuffer().then(function(buf){
+        return supParse(buf,f.name).then(function(res){
+          var id=uid();
+          return idbDo('readwrite',function(st){return st.put(new Blob([buf],{type:f.type||(res.kind==='PDF'?'application/pdf':'application/octet-stream')}),'file:'+id)})
+            .catch(function(){supDbFail=true})
+            .then(function(){
+              sp.files.push({id:id,name:f.name,size:f.size,added:Date.now(),kind:res.kind,rows:res.rows});
+              ui.open=id; ui.q=''; ui.limit=100;
+              if(!res.rows.length) bad.push(f.name+' (ingen text hittades – är det en inskannad bild?)');
+            });
+        });
+      }).catch(function(e){
+        bad.push(f.name+(e&&e.message==='xls'?' (äldre .xls – spara om som .xlsx)':e&&e.message==='pdfjs'?' (PDF-läsaren kunde inte laddas)':' (gick inte att läsa)'));
+      });
+    });
+  });
+  chain.then(function(){ ui.msg=bad.length?'Problem med: '+bad.join(', ')+'.':''; return supSave(); }).then(supRender);
+}
+function supTable(sid){
+  var sp=supFind(sid), ui=supUiOf(sid), box=$('sup-tbl-'+sid); if(!box) return;
+  var f=null; sp.files.forEach(function(x){if(x.id===ui.open)f=x});
+  if(!f){ box.innerHTML=''; return; }
+  var rows=f.rows||[], nc=0; rows.slice(0,200).forEach(function(r){nc=Math.max(nc,r.length)});
+  var q=ui.q.trim().toLowerCase(), hit=q?rows.filter(function(r){return r.join(' ').toLowerCase().indexOf(q)>-1}):rows;
+  var h='<thead><tr>'; for(var c=0;c<nc;c++) h+='<th style="text-align:left">Kolumn '+(c+1)+'</th>';
+  h+='</tr></thead><tbody>';
+  hit.slice(0,ui.limit).forEach(function(r){
+    h+='<tr>'; for(var c=0;c<nc;c++){ var v=r[c]||''; h+='<td'+(!isNaN(pnum(v))?' class="num"':'')+'>'+esc(v)+'</td>'; } h+='</tr>';
+  });
+  box.innerHTML='<h3 style="font-size:16px;margin-top:18px">'+esc(f.name)+'</h3>'+
+    (rows.length?'<div class="grid auto" style="margin-top:8px"><label class="f">Sök i listan<span class="inp"><input type="search" data-supq="'+sid+'" value="'+esc(ui.q)+'" placeholder="Artikel, benämning eller pris"></span></label></div>'+
+      '<div class="scroll"><table>'+h+'</tbody></table></div>'+
+      '<div class="chips"><span>Visar '+fmt(Math.min(ui.limit,hit.length))+' av '+fmt(hit.length)+' rader.</span>'+(hit.length>ui.limit?'<button class="btn small" type="button" data-act="more" data-sid="'+sid+'">Visa fler</button>':'')+'</div>'+
+      (f.kind==='PDF'?'<p class="note">Listan är tolkad ur PDF-filens text. Kolumnerna kan hamna fel om prislistan har en ovanlig layout – jämför med originalet vid tveksamhet.</p>':'')
+    :'<p class="note">Ingen text kunde läsas ur filen. Originalet finns kvar och går att öppna.</p>');
+}
+function supRender(){
+  txt('sup-count',sups.length?String(sups.length):'');
+  $('sup-names').innerHTML=sups.map(function(sp){return '<option value="'+esc(sp.name)+'">'}).join('');
+  $('sup-list').innerHTML=sups.map(function(sp){
+    var ui=supUiOf(sp.id);
+    return '<section class="card" aria-label="'+esc(sp.name)+'"><div class="cardhead"><h2>'+esc(sp.name)+'</h2><span>'+
+      '<button class="linkbtn" type="button" data-act="rename" data-sid="'+sp.id+'">Byt namn</button>'+
+      '<button class="linkbtn" type="button" data-act="delsup" data-sid="'+sp.id+'" style="color:var(--crit)">Ta bort leverantör</button></span></div>'+
+      '<div class="chips"><input type="file" class="vh" id="sup-file-'+sp.id+'" data-supfile="'+sp.id+'" multiple accept=".pdf,.xlsx,.csv,.txt,.skv,.tsv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv">'+
+      '<label class="btn primary" for="sup-file-'+sp.id+'">Ladda upp prislista</label><span>'+esc(ui.msg||(sp.files.length?'':'Inga prislistor uppladdade än.'))+'</span></div>'+
+      (sp.files.length?'<ul class="files">'+sp.files.map(function(f){
+        var on=ui.open===f.id;
+        return '<li'+(on?' class="on"':'')+'><span class="fn">'+esc(f.name)+'</span><span class="meta">'+f.kind+' · '+fmt((f.rows||[]).length)+' rader · '+fmtSize(f.size||0)+' · '+new Date(f.added).toLocaleDateString('sv-SE')+'</span><span>'+
+          '<button class="linkbtn" type="button" data-act="show" data-sid="'+sp.id+'" data-fid="'+f.id+'" aria-expanded="'+on+'">'+(on?'Dölj lista':'Visa lista')+'</button>'+
+          '<button class="linkbtn" type="button" data-act="orig" data-sid="'+sp.id+'" data-fid="'+f.id+'">Öppna original</button>'+
+          '<button class="linkbtn" type="button" data-act="delfile" data-sid="'+sp.id+'" data-fid="'+f.id+'" style="color:var(--crit)">Ta bort</button></span></li>';
+      }).join('')+'</ul>':'')+
+      '<div id="sup-tbl-'+sp.id+'"></div></section>';
+  }).join('');
+  sups.forEach(function(sp){supTable(sp.id)});
+}
+function supAdd(){
+  var inp=$('sup-new'), name=inp.value.trim();
+  if(!name){ inp.focus(); return; }
+  sups.push({id:uid(),name:name,files:[]}); inp.value=''; supRender(); supSave();
+}
+$('sup-add').addEventListener('click',supAdd);
+$('sup-new').addEventListener('keydown',function(e){ if(e.key==='Enter') supAdd(); });
+$('sup-list').addEventListener('change',function(e){
+  var el=e.target; if(el.dataset.supfile&&el.files&&el.files.length) supAddFiles(el.dataset.supfile,el.files);
+});
+$('sup-list').addEventListener('input',function(e){
+  var el=e.target; if(el.dataset.supq===undefined) return;
+  var sid=el.dataset.supq, ui=supUiOf(sid), pos=el.selectionStart; ui.q=el.value; ui.limit=100; supTable(sid);
+  var n=document.querySelector('[data-supq="'+sid+'"]'); if(n){ n.focus(); try{n.setSelectionRange(pos,pos)}catch(x){} }
+});
+$('sup-list').addEventListener('click',function(e){
+  var b=e.target.closest('button[data-act]'); if(!b) return;
+  var sid=b.dataset.sid, fid=b.dataset.fid, sp=supFind(sid), ui=supUiOf(sid), act=b.dataset.act, f=null;
+  if(!sp) return;
+  sp.files.forEach(function(x){if(x.id===fid)f=x});
+  if(act==='show'){ ui.open=ui.open===fid?null:fid; ui.q=''; ui.limit=100; supRender(); }
+  else if(act==='more'){ ui.limit+=200; supTable(sid); }
+  else if(act==='rename'){ var nn=prompt('Leverantörens namn',sp.name); if(nn&&nn.trim()){ sp.name=nn.trim(); supRender(); supSave(); } }
+  else if(act==='delsup'){
+    if(!confirm('Ta bort '+sp.name+(sp.files.length?' och '+sp.files.length+' uppladdade filer?':'?'))) return;
+    sp.files.forEach(function(x){ idbDo('readwrite',function(st){return st.delete('file:'+x.id)}).catch(function(){}); });
+    sups=sups.filter(function(x){return x!==sp}); supRender(); supSave();
+  }
+  else if(act==='delfile'&&f){
+    if(!confirm('Ta bort '+f.name+'?')) return;
+    idbDo('readwrite',function(st){return st.delete('file:'+f.id)}).catch(function(){});
+    sp.files=sp.files.filter(function(x){return x!==f}); if(ui.open===fid) ui.open=null; supRender(); supSave();
+  }
+  else if(act==='orig'&&f){
+    /* fönstret öppnas direkt vid klicket så att det inte stoppas som popup; PDF visas, övriga filer laddas ned */
+    var w=f.kind==='PDF'?window.open('about:blank','_blank'):null;
+    idbDo('readonly',function(st){return st.get('file:'+f.id)}).then(function(blob){
+      if(!blob) throw new Error('saknas');
+      if(w){ w.location=URL.createObjectURL(blob); } else download(blob,f.name);
+    }).catch(function(){ if(w) w.close(); ui.msg='Originalfilen '+f.name+' finns inte kvar i webbläsarens lagring.'; supRender(); });
+  }
+});
+idbDo('readonly',function(st){return st.get('suppliers')}).then(function(v){ if(Array.isArray(v)) sups=v; },function(){ supDbFail=true; }).then(function(){ supRender(); supStatus(); });
+
 /* Snabbkalkyl: fristående räknare för inköpspris, försäljningspris och täckningsgrad. */
 function vatF(){return 1+(s.vat||0)/100}
 function qRender(){
@@ -1322,7 +1561,7 @@ function evmRender(){
   $('evm-body').innerHTML=evm.map(function(it,i){
     return '<tr class="main"><td><input class="nin" data-evm="'+i+'" data-f="nr" aria-label="Artikelnummer" value="'+esc(it.nr||'')+'"></td>'+
       '<td class="txt"><input class="tin" data-evm="'+i+'" data-f="name" aria-label="Benämning" placeholder="Benämning" value="'+esc(it.name||'')+'"></td>'+
-      '<td><input class="nin" style="width:160px" data-evm="'+i+'" data-f="sup" aria-label="Leverantör" value="'+esc(it.sup||'')+'"></td>'+
+      '<td><input class="nin" style="width:160px" data-evm="'+i+'" data-f="sup" list="sup-names" aria-label="Leverantör" value="'+esc(it.sup||'')+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="cost" inputmode="decimal" aria-label="Inköpspris" value="'+pv(it.cost)+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="price" inputmode="decimal" aria-label="Försäljningspris exkl. moms" value="'+pv(it.price)+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="pin" inputmode="decimal" aria-label="Försäljningspris inkl. moms" value="'+pv(typeof it.price==='number'?it.price*vatF():null)+'"></td>'+
