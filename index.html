@@ -95,6 +95,9 @@ button,input,select{font:inherit;color:inherit}
 [hidden]{display:none!important}
 td.txt{text-align:left;white-space:normal;min-width:160px}
 td.chg{font-weight:600}
+th .sort{background:none;border:0;padding:4px 2px;margin:-4px -2px;font:inherit;color:inherit;cursor:pointer;white-space:nowrap}
+th .sort:hover,th .sort.on{color:var(--accent)}
+th .sort i{font-style:normal;display:inline-block;width:1em;text-align:center}
 .wrap.narrow{max-width:760px}
 .wrap{padding:18px 16px 48px;display:grid;gap:16px;grid-template-columns:1fr}
 @media (min-width:900px){.wrap{grid-template-columns:1fr 1fr;align-items:start}.wide{grid-column:1 / -1}}
@@ -352,7 +355,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 
   <section class="card wide" id="pf-work" hidden>
     <h2>Nya priser</h2>
-    <p class="lead">Skriv ett nytt pris på raden, eller räkna om alla rader som visas. Tomt fält betyder att priset är oförändrat.</p>
+    <p class="lead">Skriv ett nytt pris på raden, eller räkna om alla rader som visas. Tomt fält betyder att priset är oförändrat. Tryck på en kolumnrubrik för att sortera.</p>
     <div class="grid auto">
       <label class="f">Sök artikel
         <span class="inp"><input id="pf-q" type="search" placeholder="Nummer, benämning eller grupp"></span></label>
@@ -588,6 +591,7 @@ $('copy').addEventListener('click',function(){
 function flash(b,msg){var o=b.dataset.o||(b.dataset.o=b.textContent); b.textContent=msg; setTimeout(function(){b.textContent=o},1400)}
 
 /* Prisfil: läs in artikelpriser från Visma, ändra dem och skriv ut en fil i samma format. */
+var pfSort={k:'',dir:1};
 var PFKEY='renton-prisfil-v1', pf=null, pfLimit=200, pfTimer=null, pfStoreFail=false, pfMsg='';
 var ENC_NAME={'utf-8':'UTF-8','windows-1252':'Windows (ANSI)','cp850':'DOS (ASCII/OEM)','utf-16le':'Unicode (UTF-16)','utf-16be':'Unicode (UTF-16)'};
 var DELIM_NAME={'\t':'tabbavgränsad',';':'semikolonavgränsad',',':'kommaavgränsad','|':'avgränsad med lodstreck'};
@@ -859,7 +863,31 @@ function pfFiltered(){
   for(var i=pfStart();i<pf.rows.length;i++){
     if(!q||(pfCell(i,'art')+' '+pfCell(i,'name')+' '+pfCell(i,'group')).toLowerCase().indexOf(q)>-1) out.push(i);
   }
+  if(pfSort.k){
+    var k=pfSort.k, txtKey=k==='art'||k==='name'||k==='group', val={};
+    out.forEach(function(i){ val[i]=txtKey?pfCell(i,k):pfSortVal(i,k); });
+    out.sort(function(a,b){
+      var x=val[a], y=val[b], d;
+      if(txtKey){ if(x===''||y==='') { if(x!==y) return x===''?1:-1; d=0; } else d=x.localeCompare(y,'sv',{numeric:true,sensitivity:'base'}); }
+      else{ if(isNaN(x)||isNaN(y)){ if(isNaN(x)&&isNaN(y)) d=0; else return isNaN(x)?1:-1; } else d=x-y; }
+      return d*pfSort.dir||a-b;
+    });
+  }
   return out;
+}
+function pfSortVal(i,k){
+  /* tomma och ogiltiga värden blir NaN och hamnar sist */
+  var cur=pfCur(i), v=pf.np[i]!==undefined?pf.np[i]:cur, cost=pnum(pfCell(i,'cost'));
+  if(k==='cost') return cost;
+  if(k==='cur') return cur;
+  if(k==='new') return v;
+  if(k==='chg') return pfChanged(i)&&cur>0?v/cur-1:(isNaN(cur)?NaN:0);
+  if(k==='tg') return v>0&&!isNaN(cost)?(v-cost)/v:NaN;
+  return NaN;
+}
+function pfTh(k,label,left){
+  var on=pfSort.k===k;
+  return '<th'+(left?' style="text-align:left"':'')+(on?' aria-sort="'+(pfSort.dir>0?'ascending':'descending')+'"':'')+'><button class="sort'+(on?' on':'')+'" type="button" data-pfsort="'+k+'" title="Sortera efter '+label.toLowerCase()+'">'+label+'<i aria-hidden="true">'+(on?(pfSort.dir>0?'▲':'▼'):'')+'</i></button></th>';
 }
 function pfChangeHtml(i){
   var cur=pfCur(i), v=pf.np[i];
@@ -920,7 +948,8 @@ function pfRender(){
   $('pf-prev').innerHTML=prev+'</tbody>';
   var hasCost=m.cost>-1;
   $('pf-tg-f').hidden=!hasCost; $('pf-applytg').hidden=!hasCost;
-  $('pf-head').innerHTML='<tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th style="text-align:left">Artikelgrupp</th>'+(hasCost?'<th>Inköpspris</th>':'')+'<th>Nuvarande pris</th><th>Nytt pris</th><th>Ändring</th>'+(hasCost?'<th>TG</th>':'')+'<th></th></tr>';
+  if((pfSort.k==='cost'||pfSort.k==='tg')&&!hasCost) pfSort.k='';
+  $('pf-head').innerHTML='<tr>'+pfTh('art','Artikelnummer',1)+pfTh('name','Benämning',1)+pfTh('group','Artikelgrupp',1)+(hasCost?pfTh('cost','Inköpspris'):'')+pfTh('cur','Nuvarande pris')+pfTh('new','Nytt pris')+pfTh('chg','Ändring')+(hasCost?pfTh('tg','TG'):'')+'<th></th></tr>';
   var list=pfFiltered(), rows='';
   list.slice(0,pfLimit).forEach(function(i){
     var cur=pfCur(i), v=pf.np[i];
@@ -1024,6 +1053,13 @@ $('panel-prisfil').addEventListener('click',function(e){
     pfFiltered().forEach(function(i){var c=pnum(pfCell(i,'cost')); if(c>0) pfSet(i,roundTo(c/(1-tgv),m))});
   }else if(b.id==='pf-reset'){
     if(!confirm('Återställa alla nya priser?')) return; pf.np={};
+  }else if(b.dataset.pfsort){
+    /* första trycket: stigande, andra: fallande, tredje: filens ordning */
+    var sk=b.dataset.pfsort;
+    if(pfSort.k!==sk) pfSort={k:sk,dir:1}; else if(pfSort.dir===1) pfSort.dir=-1; else pfSort={k:'',dir:1};
+    pfLimit=200; pfRender();
+    var nb=document.querySelector('[data-pfsort="'+sk+'"]'); if(nb) nb.focus();
+    return;
   }else if(b.id==='pf-more'){ pfLimit+=200;
   }else if(b.dataset.pfcalc!==undefined){
     i=+b.dataset.pfcalc; v=pf.np[i]!==undefined?pf.np[i]:pfCur(i);
