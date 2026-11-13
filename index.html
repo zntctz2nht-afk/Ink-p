@@ -95,6 +95,8 @@ button,input,select{font:inherit;color:inherit}
 [hidden]{display:none!important}
 td.txt{text-align:left;white-space:normal;min-width:160px}
 td.chg{font-weight:600}
+td input.tin{width:100%;min-width:200px;text-align:left}
+td input.nin{width:120px;text-align:left}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
 .stats div{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
 .stats .k{font-size:13px;color:var(--muted)}
@@ -184,6 +186,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <button class="tab" type="button" role="tab" id="tab-stege" data-tab="stege" aria-controls="panel-stege">Prisstege</button>
     <button class="tab" type="button" role="tab" id="tab-valuta" data-tab="valuta" aria-controls="panel-valuta">Valuta</button>
     <button class="tab" type="button" role="tab" id="tab-prisfil" data-tab="prisfil" aria-controls="panel-prisfil">Prisfil<span class="count" id="pf-count"></span></button>
+    <button class="tab" type="button" role="tab" id="tab-evm" data-tab="evm" aria-controls="panel-evm">EVM<span class="count" id="evm-count"></span></button>
     <button class="tab" type="button" role="tab" id="tab-sparade" data-tab="sparade" aria-controls="panel-sparade">Sparade<span class="count" id="saved-count"></span></button>
   </div>
 </nav>
@@ -432,6 +435,22 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
   </section>
 </div>
 
+<div class="wrap panel" role="tabpanel" id="panel-evm" aria-labelledby="tab-evm" hidden>
+  <section class="card wide">
+    <h2>EVM – eget varumärke</h2>
+    <p class="lead">Lista de artiklar som kan ingå i det egna varumärket, med egna benämningar och priser. Priserna är exklusive moms. Listan sparas i den här webbläsaren.</p>
+    <div class="scroll" style="margin-top:0"><table>
+      <thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th>Inköpspris</th><th>Försäljningspris</th><th>TB</th><th>TG</th><th></th></tr></thead>
+      <tbody id="evm-body"></tbody></table></div>
+    <div class="empty" id="evm-empty">Inga artiklar än. Tryck på Lägg till artikel för att börja.</div>
+    <div class="chips">
+      <button class="btn primary" type="button" id="evm-add">Lägg till artikel</button>
+      <button class="btn" type="button" id="evm-xlsx">Ladda ned som Excel</button>
+    </div>
+    <p class="note" id="evm-sum" aria-live="polite"></p>
+  </section>
+</div>
+
 <div class="wrap panel" role="tabpanel" id="panel-sparade" aria-labelledby="tab-sparade" hidden>
   <section class="card wide">
     <h2>Sparade kalkyler</h2>
@@ -454,12 +473,12 @@ var DEF={name:'Avhärdare 20 L med WiFi-ventil (exempel)',price:285,cur:'EUR',qt
   duty:0,other:35,overhead:5,fxBuf:2,N:5490,R:7996,campaign:0,vat:25,targetTG:35,step:'5',vol:120,
   cvAmt:1000,cvFrom:'EUR',cvTo:'SEK',
   rates:{EUR:11.051,USD:9.9317,CNY:1.4889,GBP:13.1558,NOK:1.0354,DKK:1.4814}};
-var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop', quick={cost:3150,price:5490};
+var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop', quick={cost:3150,price:5490}, evm=[];
 try{
   var raw=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; }
+  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; if(Array.isArray(raw.evm))evm=raw.evm; }
 }catch(e){}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick}))}catch(e){}}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick,evm:evm}))}catch(e){}}
 
 var $=function(id){return document.getElementById(id)};
 function num(v){var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.'));return isFinite(n)?n:0}
@@ -1223,6 +1242,65 @@ $('panel-snabb').addEventListener('input',function(e){
 });
 $('panel-snabb').addEventListener('focusout',function(){ setTimeout(qRender,0); });
 qRender();
+
+/* EVM: egen artikellista för planering av eget varumärke. */
+function evmCalc(it){
+  var ok=typeof it.cost==='number'&&typeof it.price==='number', tb=ok?it.price-it.cost:NaN;
+  return {tb:tb,tg:ok&&it.price>0?tb/it.price:NaN};
+}
+function evmCells(i){
+  var x=evmCalc(evm[i]), cls=x.tb<0?'neg':'';
+  $('evm-tb-'+i).className=cls; $('evm-tg-'+i).className=cls;
+  txt('evm-tb-'+i,isNaN(x.tb)?'–':kr2(x.tb)); txt('evm-tg-'+i,isNaN(x.tg)?'–':pct(x.tg));
+}
+function evmSummary(){
+  var n=0,sum=0,min=Infinity,minName='';
+  evm.forEach(function(it){ var x=evmCalc(it); if(!isNaN(x.tg)){ n++; sum+=x.tg; if(x.tg<min){min=x.tg;minName=it.name||it.nr||'namnlös artikel'} } });
+  txt('evm-sum',evm.length?fmt(evm.length)+' artiklar'+(n?' · genomsnittlig TG '+pct(sum/n)+' · lägst TG '+pct(min)+' ('+minName+')':'')+'.':'');
+  txt('evm-count',evm.length?String(evm.length):'');
+  $('evm-empty').style.display=evm.length?'none':'block';
+  $('evm-xlsx').hidden=!evm.length;
+}
+function evmRender(){
+  var pv=function(v){return typeof v==='number'?plain(v,2):''};
+  $('evm-body').innerHTML=evm.map(function(it,i){
+    return '<tr><td><input class="nin" data-evm="'+i+'" data-f="nr" aria-label="Artikelnummer" value="'+esc(it.nr||'')+'"></td>'+
+      '<td class="txt"><input class="tin" data-evm="'+i+'" data-f="name" aria-label="Benämning" placeholder="Benämning" value="'+esc(it.name||'')+'"></td>'+
+      '<td><input data-evm="'+i+'" data-f="cost" inputmode="decimal" aria-label="Inköpspris" value="'+pv(it.cost)+'"></td>'+
+      '<td><input data-evm="'+i+'" data-f="price" inputmode="decimal" aria-label="Försäljningspris" value="'+pv(it.price)+'"></td>'+
+      '<td id="evm-tb-'+i+'"></td><td id="evm-tg-'+i+'"></td>'+
+      '<td><button class="linkbtn" type="button" data-evmdel="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>';
+  }).join('');
+  evm.forEach(function(it,i){evmCells(i)});
+  evmSummary();
+}
+function download(blob,fn){
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fn;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+}
+$('panel-evm').addEventListener('input',function(e){
+  var el=e.target; if(el.dataset.evm===undefined) return;
+  var i=+el.dataset.evm, f=el.dataset.f;
+  evm[i][f]=(f==='nr'||f==='name')?el.value:(el.value.trim()===''?null:num(el.value));
+  evmCells(i); evmSummary(); persist();
+});
+$('panel-evm').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  if(b.id==='evm-add'){
+    evm.push({nr:'',name:'',cost:null,price:null}); evmRender(); persist();
+    var inp=document.querySelector('[data-evm="'+(evm.length-1)+'"][data-f="name"]'); if(inp) inp.focus();
+  }else if(b.dataset.evmdel!==undefined){
+    var it=evm[+b.dataset.evmdel];
+    if((it.name||it.nr||it.cost!=null||it.price!=null)&&!confirm('Ta bort '+(it.name||it.nr||'artikeln')+'?')) return;
+    evm.splice(+b.dataset.evmdel,1); evmRender(); persist();
+  }else if(b.id==='evm-xlsx'){
+    var S=function(v){return {v:v||'',n:false}}, N=function(v){return typeof v==='number'&&isFinite(v)?{v:Math.round(v*10000)/10000,n:true}:{v:'',n:false}};
+    var rows=[['Artikelnummer','Benämning','Inköpspris','Försäljningspris','TB','TG %'].map(S)];
+    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),N(it.cost),N(it.price),N(x.tb),N(x.tg*100)]); });
+    download(xlsxWrite(rows,'EVM'),'evm-artiklar.xlsx');
+  }
+});
+evmRender();
 
 /* Flikar */
 var TABS=[].slice.call(document.querySelectorAll('#tabs .tab'));
