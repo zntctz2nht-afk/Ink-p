@@ -440,7 +440,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <h2>EVM – eget varumärke</h2>
     <p class="lead">Lista de artiklar som kan ingå i det egna varumärket, med egna benämningar och priser. Priserna är exklusive moms. Listan sparas i den här webbläsaren.</p>
     <div class="scroll" style="margin-top:0"><table>
-      <thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th>Inköpspris</th><th>Försäljningspris</th><th>TB</th><th>TG</th><th></th></tr></thead>
+      <thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th style="text-align:left">Leverantör</th><th>Inköpspris</th><th>Försäljningspris</th><th>TB</th><th>TG</th><th></th></tr></thead>
       <tbody id="evm-body"></tbody></table></div>
     <div class="empty" id="evm-empty">Inga artiklar än. Tryck på Lägg till artikel för att börja.</div>
     <div class="chips">
@@ -1266,6 +1266,7 @@ function evmRender(){
   $('evm-body').innerHTML=evm.map(function(it,i){
     return '<tr><td><input class="nin" data-evm="'+i+'" data-f="nr" aria-label="Artikelnummer" value="'+esc(it.nr||'')+'"></td>'+
       '<td class="txt"><input class="tin" data-evm="'+i+'" data-f="name" aria-label="Benämning" placeholder="Benämning" value="'+esc(it.name||'')+'"></td>'+
+      '<td><input class="nin" style="width:160px" data-evm="'+i+'" data-f="sup" aria-label="Leverantör" value="'+esc(it.sup||'')+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="cost" inputmode="decimal" aria-label="Inköpspris" value="'+pv(it.cost)+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="price" inputmode="decimal" aria-label="Försäljningspris" value="'+pv(it.price)+'"></td>'+
       '<td id="evm-tb-'+i+'"></td><td id="evm-tg-'+i+'"></td>'+
@@ -1281,22 +1282,22 @@ function download(blob,fn){
 $('panel-evm').addEventListener('input',function(e){
   var el=e.target; if(el.dataset.evm===undefined) return;
   var i=+el.dataset.evm, f=el.dataset.f;
-  evm[i][f]=(f==='nr'||f==='name')?el.value:(el.value.trim()===''?null:num(el.value));
+  evm[i][f]=(f==='nr'||f==='name'||f==='sup')?el.value:(el.value.trim()===''?null:num(el.value));
   evmCells(i); evmSummary(); persist();
 });
 $('panel-evm').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
   if(b.id==='evm-add'){
-    evm.push({nr:'',name:'',cost:null,price:null}); evmRender(); persist();
+    evm.push({nr:'',name:'',sup:'',cost:null,price:null}); evmRender(); persist();
     var inp=document.querySelector('[data-evm="'+(evm.length-1)+'"][data-f="name"]'); if(inp) inp.focus();
   }else if(b.dataset.evmdel!==undefined){
     var it=evm[+b.dataset.evmdel];
-    if((it.name||it.nr||it.cost!=null||it.price!=null)&&!confirm('Ta bort '+(it.name||it.nr||'artikeln')+'?')) return;
+    if((it.name||it.nr||it.sup||it.cost!=null||it.price!=null)&&!confirm('Ta bort '+(it.name||it.nr||'artikeln')+'?')) return;
     evm.splice(+b.dataset.evmdel,1); evmRender(); persist();
   }else if(b.id==='evm-xlsx'){
     var S=function(v){return {v:v||'',n:false}}, N=function(v){return typeof v==='number'&&isFinite(v)?{v:Math.round(v*10000)/10000,n:true}:{v:'',n:false}};
-    var rows=[['Artikelnummer','Benämning','Inköpspris','Försäljningspris','TB','TG %'].map(S)];
-    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),N(it.cost),N(it.price),N(x.tb),N(x.tg*100)]); });
+    var rows=[['Artikelnummer','Benämning','Leverantör','Inköpspris','Försäljningspris','TB','TG %'].map(S)];
+    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),S(it.sup),N(it.cost),N(it.price),N(x.tb),N(x.tg*100)]); });
     download(xlsxWrite(rows,'EVM'),'evm-artiklar.xlsx');
   }
 });
