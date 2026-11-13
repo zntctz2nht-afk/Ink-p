@@ -517,7 +517,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 <div class="wrap panel" role="tabpanel" id="panel-lev" aria-labelledby="tab-lev" hidden>
   <section class="card wide">
     <h2>Leverantörer</h2>
-    <p class="lead">Din arbetsplats för inköp. Lägg upp en sektion per leverantör, ladda upp deras prislistor och fakturor i PDF eller Excel, och koppla fakturaraderna till dina egna artiklar. Originalfilerna sparas så att du kan öppna dem igen. Allt lagras i den här webbläsaren.</p>
+    <p class="lead">Din arbetsplats för inköp. Lägg upp en sektion per leverantör, ladda upp deras prislistor och fakturor i PDF eller Excel (även inskannade sidor och foton), och koppla fakturaraderna till dina egna artiklar. Originalfilerna sparas så att du kan öppna dem igen. Allt lagras i den här webbläsaren.</p>
     <div class="namerow" style="margin-top:0">
       <span class="inp" style="flex:1 1 220px"><input id="sup-new" aria-label="Leverantörens namn" placeholder="Leverantörens namn"></span>
       <button class="btn primary" type="button" id="sup-add">Lägg till leverantör</button>
@@ -1425,6 +1425,53 @@ function pdfLib(){
   pdfLoading=tryBase(0); pdfLoading.catch(function(){pdfLoading=null});
   return pdfLoading;
 }
+function itemsToLines(items){
+  /* textbitar med läge (x, y uppåt, bredd, höjd) → rader av celler; bitar med litet avstånd slås ihop till en cell */
+  var out=[], cur=null, pageLines=[];
+  items.sort(function(a,b){return b.y-a.y||a.x-b.x});
+  items.forEach(function(it){
+    if(!cur||Math.abs(cur.y-it.y)>Math.max(2,it.h*0.4)){ cur={y:it.y,items:[]}; pageLines.push(cur); }
+    cur.items.push(it);
+  });
+  pageLines.forEach(function(ln){
+    ln.items.sort(function(a,b){return a.x-b.x});
+    var cells=[], c=null;
+    ln.items.forEach(function(it){
+      var gap=c?it.x-c.x1:0;
+      if(c&&gap<it.h*0.9){ c.t+=(gap>it.h*0.15&&!/\s$/.test(c.t)?' ':'')+it.s; c.x1=Math.max(c.x1,it.x+it.w); }
+      else{ c={x0:it.x,x1:it.x+it.w,t:it.s}; cells.push(c); }
+    });
+    cells.forEach(function(c){c.t=c.t.replace(/\s+/g,' ').trim()});
+    cells=cells.filter(function(c){return c.t!==''});
+    if(cells.length) out.push(cells);
+  });
+  return out;
+}
+/* Texttolkning (OCR) av inskannade sidor och foton. Tesseract.js och språkdata hämtas från nätet första gången det behövs. */
+var ocrLoading=null, ocrW=null;
+function ocrLib(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(ocrLoading) return ocrLoading;
+  ocrLoading=new Promise(function(res,rej){
+    var sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    sc.onload=function(){ if(window.Tesseract) res(window.Tesseract); else rej(new Error('ocr')); };
+    sc.onerror=function(){ sc.remove(); rej(new Error('ocr')); };
+    document.head.appendChild(sc);
+  });
+  ocrLoading.catch(function(){ocrLoading=null});
+  return ocrLoading;
+}
+function ocrLines(img){
+  if(!ocrW){ ocrW=ocrLib().then(function(T){return T.createWorker(['swe','eng'])}); ocrW.catch(function(){ocrW=null}); }
+  return ocrW.then(function(w){return w.recognize(img)}).then(function(r){
+    var items=[];
+    (r.data.lines||[]).forEach(function(ln){
+      var h=Math.max(6,ln.bbox.y1-ln.bbox.y0);
+      (ln.words||[]).forEach(function(w){ if(w.text&&w.text.trim()&&w.confidence>15) items.push({x:w.bbox.x0,y:-ln.bbox.y1,w:w.bbox.x1-w.bbox.x0,h:h,s:w.text}); });
+    });
+    return itemsToLines(items);
+  },function(){ throw new Error('ocr'); });
+}
 function pdfRows(buf){
   return pdfLib().then(function(lib){ return lib.getDocument({data:new Uint8Array(buf)}).promise; }).then(function(doc){
     var lines=[], chain=Promise.resolve();
@@ -1434,27 +1481,23 @@ function pdfRows(buf){
           var h=it.height||Math.abs(it.transform[3])||10;
           return {x:it.transform[4],y:it.transform[5],w:it.width||0,h:h,s:it.str};
         });
-        items.sort(function(a,b){return b.y-a.y||a.x-b.x});
-        var cur=null, pageLines=[];
-        items.forEach(function(it){
-          if(!cur||Math.abs(cur.y-it.y)>Math.max(2,it.h*0.4)){ cur={y:it.y,items:[]}; pageLines.push(cur); }
-          cur.items.push(it);
-        });
-        pageLines.forEach(function(ln){
-          ln.items.sort(function(a,b){return a.x-b.x});
-          var cells=[], c=null;
-          ln.items.forEach(function(it){
-            var gap=c?it.x-c.x1:0;
-            if(c&&gap<it.h*0.9){ c.t+=(gap>it.h*0.15&&!/\s$/.test(c.t)?' ':'')+it.s; c.x1=Math.max(c.x1,it.x+it.w); }
-            else{ c={x0:it.x,x1:it.x+it.w,t:it.s}; cells.push(c); }
-          });
-          cells.forEach(function(c){c.t=c.t.replace(/\s+/g,' ').trim()});
-          lines.push(cells.filter(function(c){return c.t!==''}));
-        });
+        itemsToLines(items).forEach(function(l){lines.push(l)});
       });
     };
+    var scanPage=function(n){
+      /* sidan saknar text: rita den som bild och tolka bilden */
+      return doc.getPage(n).then(function(pg){
+        var vp=pg.getViewport({scale:2}), cv=document.createElement('canvas'); cv.width=Math.ceil(vp.width); cv.height=Math.ceil(vp.height);
+        return pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise.then(function(){return ocrLines(cv)});
+      }).then(function(ls){ ls.forEach(function(l){lines.push(l)}); });
+    };
     for(var n=1;n<=doc.numPages;n++) (function(n){ chain=chain.then(function(){return onePage(n)}); })(n);
-    return chain.then(function(){ return pdfColumns(lines.filter(function(l){return l.length})); });
+    return chain.then(function(){
+      if(lines.length) return pdfColumns(lines);
+      var c2=Promise.resolve();
+      for(var n=1;n<=Math.min(doc.numPages,10);n++) (function(n){ c2=c2.then(function(){return scanPage(n)}); })(n);
+      return c2.then(function(){ var rows=pdfColumns(lines); rows.ocr=true; return rows; });
+    });
   });
 }
 function pdfColumns(lines){
@@ -1488,7 +1531,8 @@ function pdfColumns(lines){
 }
 function supParse(buf,name){
   var b=new Uint8Array(buf);
-  if(b[0]===0x25&&b[1]===0x50&&b[2]===0x44&&b[3]===0x46) return pdfRows(buf.slice(0)).then(function(rows){return {kind:'PDF',rows:rows}});
+  if(b[0]===0x25&&b[1]===0x50&&b[2]===0x44&&b[3]===0x46) return pdfRows(buf.slice(0)).then(function(rows){return {kind:rows.ocr?'PDF (inskannad)':'PDF',rows:rows}});
+  if((b[0]===0xFF&&b[1]===0xD8)||(b[0]===0x89&&b[1]===0x50&&b[2]===0x4E&&b[3]===0x47)) return ocrLines(new Blob([buf])).then(function(ls){return {kind:'Bild',rows:pdfColumns(ls)}});
   if(b[0]===0x50&&b[1]===0x4B) return xlsxRead(b).then(function(r){return {kind:'Excel',rows:r.rows}});
   if(b[0]===0xD0&&b[1]===0xCF) return Promise.reject(new Error('xls'));
   var enc=pfDetectEnc(b), text=pfDecode(b,enc);
@@ -1502,19 +1546,19 @@ function supAddFiles(sid,files,asInvoice){
       return f.arrayBuffer().then(function(buf){
         return supParse(buf,f.name).then(function(res){
           var id=uid();
-          return idbDo('readwrite',function(st){return st.put(new Blob([buf],{type:f.type||(res.kind==='PDF'?'application/pdf':'application/octet-stream')}),'file:'+id)})
+          return idbDo('readwrite',function(st){return st.put(new Blob([buf],{type:f.type||(res.kind.indexOf('PDF')===0?'application/pdf':'application/octet-stream')}),'file:'+id)})
             .catch(function(){supDbFail=true})
             .then(function(){
               var rec={id:id,name:f.name,size:f.size,added:Date.now(),kind:res.kind,rows:res.rows};
               if(asInvoice){ invInit(sp,rec); sp.invoices.push(rec); ui.openInv=id; }
               else{ plInit(sp,rec); sp.files.push(rec); ui.open=id; ui.q=''; ui.limit=100; ui.cmp=null; ui.view='all'; }
-              if(!res.rows.length) bad.push(f.name+' (ingen text hittades – är det en inskannad bild?)');
+              if(!res.rows.length) bad.push(f.name+' (ingen text kunde läsas ur filen)');
               else if(asInvoice&&!invLines(sp,rec).length) bad.push(f.name+' (inga fakturarader hittades – kontrollera kolumnvalen)');
               else if(asInvoice&&invDup(sp,rec)) bad.push(f.name+' (samma fakturanummer som '+invDup(sp,rec).name+' – möjlig dubblett)');
             });
         });
       }).catch(function(e){
-        bad.push(f.name+(e&&e.message==='xls'?' (äldre .xls – spara om som .xlsx)':e&&e.message==='pdfjs'?' (PDF-läsaren kunde inte laddas)':' (gick inte att läsa)'));
+        bad.push(f.name+(e&&e.message==='xls'?' (äldre .xls – spara om som .xlsx)':e&&e.message==='pdfjs'?' (PDF-läsaren kunde inte laddas)':e&&e.message==='ocr'?' (filen är inskannad och texttolkningen kunde inte laddas – det kräver internetanslutning)':' (gick inte att läsa)'));
       });
     });
   });
@@ -1526,6 +1570,16 @@ function inum(v){
   v=String(v==null?'':v).replace(/[^\d.,\-]/g,''); if(!v) return NaN;
   v=(v.charAt(0)+v.slice(1).replace(/-/g,'')).replace(/[.,]+$/,'');
   return pnum(v);
+}
+function money(v){
+  /* ett belopp: ett tal med högst en valutabeteckning före eller efter, så att löptext med siffror inte räknas som pris */
+  v=String(v==null?'':v).trim().replace(/^(?:SEK|EUR|USD|GBP|NOK|DKK|CNY|kr|€|\$|£)\s*/i,'').replace(/\s*(?:SEK|EUR|USD|GBP|NOK|DKK|CNY|kr|€|\$|£|:-|,-)$/i,'');
+  return /^-?\d[\d\s\u00a0.,]*$/.test(v)?pnum(v.replace(/[.,]+$/,'')):NaN;
+}
+function qnum(v){
+  /* ett antal: ett tal, eventuellt följt av en kort enhet som st, säck eller pcs */
+  var m=/^(-?\d[\d\s\u00a0.,]*?)\s*[A-Za-zÅÄÖåäö.]{0,8}$/.exec(String(v==null?'':v).trim());
+  return m?pnum(m[1].replace(/[.,]+$/,'')):NaN;
 }
 function normDate(m){
   var y,mo,d; if(!m) return '';
@@ -1594,7 +1648,7 @@ function invLines(sp,inv){
   var m=inv.map||{}, out=[], cell=function(r,k){return m[k]>-1?String(r[m[k]]||'').trim():''};
   (inv.rows||[]).forEach(function(r,i){
     if(inv.skip&&inv.skip[i]) return;
-    var art=cell(r,'art'), name=cell(r,'name'), qty=inum(cell(r,'qty')), price=inum(cell(r,'price')), total=inum(cell(r,'total'));
+    var art=cell(r,'art'), name=cell(r,'name'), qty=qnum(cell(r,'qty')), price=money(cell(r,'price')), total=money(cell(r,'total'));
     if(isNaN(price)&&total>0&&qty>0) price=total/qty;
     if(isNaN(price)||price<0||(m.qty>-1&&isNaN(qty))||(!art&&!name)) return;
     if(isNaN(total)&&!isNaN(qty)) total=qty*price;
@@ -1675,7 +1729,7 @@ function invTable(sid){
     '</div><div class="chips"><button class="btn small" type="button" data-act="addline"'+at+'>Lägg till egen rad</button><span>För rader som avläsningen missade.</span></div>'+
     (nskip?'<div class="chips"><span>'+nskip+(nskip===1?' rad är borttagen':' rader är borttagna')+' från registret.</span><button class="linkbtn" type="button" data-act="unskip"'+at+'>Återställ</button></div>':'')+
     '<details class="raw"><summary>Visa allt som lästes ur filen</summary><div class="scroll"><table>'+raw+'</table></div></details>'+
-    (inv.kind==='PDF'?'<p class="note">Fakturan är tolkad ur PDF-filens text och kan innehålla fel. Jämför med originalet.</p>':'');
+    (inv.kind==='PDF'?'<p class="note">Fakturan är tolkad ur PDF-filens text och kan innehålla fel. Jämför med originalet.</p>':inv.kind!=='Excel'&&inv.kind!=='Text'?'<p class="note">Fakturan är inskannad och har texttolkats ur en bild. Enstaka tecken och siffror kan ha blivit fel – kontrollera priserna mot originalet.</p>':'');
 }
 
 /* Inköpsregister: alla fakturarader grupperade per kopplad artikel (eller per leverantörsartikel om den inte är kopplad). */
@@ -1754,7 +1808,7 @@ function plLines(f){
   var m=f.map||{}, out=[], cell=function(r,k){return m[k]>-1?String(r[m[k]]||'').trim():''};
   if(!(m.price>-1)) return out;
   (f.rows||[]).forEach(function(r,i){
-    var art=cell(r,'art'), name=cell(r,'name'), price=inum(cell(r,'price'));
+    var art=cell(r,'art'), name=cell(r,'name'), price=money(cell(r,'price'));
     if(isNaN(price)||price<=0||(!art&&!name)) return;
     out.push({i:i,art:art,name:name,price:price,key:(art?art.toLowerCase():'d:'+name.toLowerCase())});
   });
@@ -1815,7 +1869,7 @@ function supTable(sid){
     (rows.length?'<div class="grid auto" style="margin-top:8px"><label class="f">Sök i listan<span class="inp"><input type="search" data-supq="'+sid+'" value="'+esc(ui.q)+'" placeholder="Artikelnummer eller benämning"></span></label></div>'+body+
       '<div class="chips"><span>Visar '+fmt(Math.min(ui.limit,count))+' av '+fmt(count)+' rader.</span>'+(count>ui.limit?'<button class="btn small" type="button" data-act="more" data-sid="'+sid+'">Visa fler</button>':'')+'</div>'+
       (ls.length?'<details class="raw"><summary>Visa allt som lästes ur filen</summary><div class="scroll"><table>'+rawTbl+rows.slice(0,150).map(function(r){var h='<tr>';for(var c=0;c<nc;c++)h+='<td>'+esc(r[c]||'')+'</td>';return h+'</tr>'}).join('')+'</tbody></table></div></details>':'')+
-      (f.kind==='PDF'?'<p class="note">Listan är tolkad ur PDF-filens text. Kolumnerna kan hamna fel om prislistan har en ovanlig layout – jämför med originalet vid tveksamhet.</p>':'')
+      (f.kind!=='Excel'&&f.kind!=='Text'?'<p class="note">Listan är tolkad ur PDF-filens text eller ur en bild. Kolumnerna kan hamna fel om prislistan har en ovanlig layout – jämför med originalet vid tveksamhet.</p>':'')
     :'<p class="note">Ingen text kunde läsas ur filen. Originalet finns kvar och går att öppna.</p>');
 }
 function supInfoHtml(sp,ui){
@@ -1828,7 +1882,7 @@ function supInfoHtml(sp,ui){
     '<label class="f" style="margin-top:12px">Anteckningar<textarea class="ta" rows="2" data-supinfo="note"'+at+'>'+esc(i.note||'')+'</textarea></label></details>';
 }
 function supRender(){
-  var ACC='.pdf,.xlsx,.csv,.txt,.skv,.tsv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv';
+  var ACC='.pdf,.xlsx,.csv,.txt,.skv,.tsv,.jpg,.jpeg,.png,image/jpeg,image/png,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv';
   txt('sup-count',sups.length?String(sups.length):'');
   $('sup-names').innerHTML=sups.map(function(sp){return '<option value="'+esc(sp.name)+'">'}).join('');
   artList();
@@ -1950,7 +2004,7 @@ $('sup-list').addEventListener('click',function(e){
   }
   else if(act==='orig'&&f){
     /* fönstret öppnas direkt vid klicket så att det inte stoppas som popup; PDF visas, övriga filer laddas ned */
-    var w=f.kind==='PDF'?window.open('about:blank','_blank'):null;
+    var w=/^PDF|^Bild/.test(f.kind)?window.open('about:blank','_blank'):null;
     idbDo('readonly',function(st){return st.get('file:'+f.id)}).then(function(blob){
       if(!blob) throw new Error('saknas');
       if(w){ w.location=URL.createObjectURL(blob); } else download(blob,f.name);
