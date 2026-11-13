@@ -363,11 +363,13 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 
   <section class="card">
     <h2>Valutakurser</h2>
-    <p class="lead">Kronor per en enhet utländsk valuta. Startvärdena är riktkurser från den 10–11 november 2026. Skriv in dagens kurs eller den kurs banken ger dig.</p>
+    <p class="lead">Kronor per en enhet utländsk valuta. Hämta dagens referenskurser med knappen, eller skriv in den kurs banken ger dig.</p>
+    <div class="chips" style="margin-top:0"><button class="btn primary" type="button" id="fx-update">Uppdatera kurser</button><span id="fx-status" aria-live="polite"></span></div>
+    <label class="check"><input type="checkbox" id="fx-auto"> Uppdatera automatiskt när sidan öppnas</label>
     <div class="scroll"><table>
       <thead><tr><th>Valuta</th><th>Kurs (kr)</th><th>Med påslag</th></tr></thead>
       <tbody id="rates"></tbody></table></div>
-    <p class="note">Sidan kan inte hämta kurser automatiskt. Ändringar här slår igenom direkt i hela kalkylen.</p>
+    <p class="note">Kurserna är referenskurser från Europeiska centralbanken (via tjänsten Frankfurter) och uppdateras en gång per bankdag, runt klockan 16. Bankens växelkurs kan avvika, så använd valutapåslaget som buffert. Ändringar här slår igenom direkt i hela kalkylen.</p>
   </section>
 </div>
 
@@ -482,12 +484,12 @@ var DEF={name:'Avhärdare 20 L med WiFi-ventil (exempel)',price:285,cur:'EUR',qt
   duty:0,other:35,overhead:5,fxBuf:2,N:5490,R:7996,campaign:0,vat:25,targetTG:35,step:'5',vol:120,
   cvAmt:1000,cvFrom:'EUR',cvTo:'SEK',
   rates:{EUR:11.051,USD:9.9317,CNY:1.4889,GBP:13.1558,NOK:1.0354,DKK:1.4814}};
-var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop', quick={cost:3150,price:5490}, evm=[];
+var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop', quick={cost:3150,price:5490}, evm=[], fxm={auto:true,date:'',at:0};
 try{
   var raw=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; if(Array.isArray(raw.evm))evm=raw.evm; }
+  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; if(Array.isArray(raw.evm))evm=raw.evm; if(raw.fxm)fxm=raw.fxm; }
 }catch(e){}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick,evm:evm}))}catch(e){}}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick,evm:evm,fxm:fxm}))}catch(e){}}
 
 var $=function(id){return document.getElementById(id)};
 function num(v){var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.'));return isFinite(n)?n:0}
@@ -1238,6 +1240,33 @@ try{
 }catch(e){ pf=null }
 pfRender();
 
+/* Valutakurser: hämtar ECB:s referenskurser. Tjänsten svarar med utländsk valuta per krona, så kursen inverteras. */
+function fxStatus(msg){
+  var d=fxm.at?new Date(fxm.at):null;
+  txt('fx-status',msg||(d?'Kurser per '+fxm.date+', hämtade '+d.toLocaleDateString('sv-SE')+' kl. '+d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'})+'.':'Kurserna är inte hämtade än. Startvärdena är riktkurser från november 2026.'));
+}
+function fxFetch(){
+  var btn=$('fx-update'); btn.disabled=true; fxStatus('Hämtar kurser …');
+  fetch('https://api.frankfurter.dev/v1/latest?base=SEK&symbols='+CURS.join(','),{cache:'no-store'})
+    .then(function(r){ if(!r.ok) throw new Error('http'); return r.json(); })
+    .then(function(d){
+      var n=0;
+      CURS.forEach(function(c){
+        var r=d&&d.rates?+d.rates[c]:0;
+        if(r>0){ s.rates[c]=+(1/r).toFixed(4); n++; var inp=$('rate-'+c); if(inp) inp.value=plain(s.rates[c],4); }
+      });
+      if(!n) throw new Error('tomt');
+      fxm.date=String(d.date||''); fxm.at=Date.now();
+      render(); fxStatus();
+    })
+    .catch(function(){ fxStatus('Det gick inte att hämta kurser just nu. Kurserna i tabellen används som de är.'); })
+    .then(function(){ btn.disabled=false; });
+}
+$('fx-update').addEventListener('click',fxFetch);
+$('fx-auto').checked=fxm.auto!==false;
+$('fx-auto').addEventListener('change',function(){ fxm.auto=this.checked; persist(); });
+fxStatus();
+
 /* Snabbkalkyl: fristående räknare för inköpspris, försäljningspris och täckningsgrad. */
 function vatF(){return 1+(s.vat||0)/100}
 function qRender(){
@@ -1362,6 +1391,7 @@ $('tabs').addEventListener('keydown',function(e){
 window.addEventListener('hashchange',function(){var h=location.hash.slice(1); if(h&&h!==tab)showTab(h)});
 
 fill(); render(); showTab(location.hash.slice(1)||tab);
+if(fxm.auto!==false&&Date.now()-(fxm.at||0)>6*3600*1000) fxFetch();
 })();
 </script>
 </body>
