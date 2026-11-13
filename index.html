@@ -97,6 +97,8 @@ td.txt{text-align:left;white-space:normal;min-width:160px}
 td.chg{font-weight:600}
 th .sort{background:none;border:0;padding:4px 2px;margin:-4px -2px;font:inherit;color:inherit;cursor:pointer;white-space:nowrap}
 th .sort:hover,th .sort.on{color:var(--accent)}
+th select{font:inherit;font-weight:600;color:inherit;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:4px 6px;max-width:220px;cursor:pointer}
+th select.on{color:var(--accent);border-color:var(--accent)}
 th .sort i{font-style:normal;display:inline-block;width:1em;text-align:center}
 .wrap.narrow{max-width:760px}
 .wrap{padding:18px 16px 48px;display:grid;gap:16px;grid-template-columns:1fr}
@@ -362,7 +364,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 
   <section class="card wide" id="pf-work" hidden>
     <h2>Nya priser</h2>
-    <p class="lead">Skriv ett nytt pris på raden, eller räkna om alla rader som visas. Tomt fält betyder att priset är oförändrat. Tryck på en kolumnrubrik för att sortera.</p>
+    <p class="lead">Skriv ett nytt pris på raden, eller räkna om alla rader som visas. Tomt fält betyder att priset är oförändrat. Tryck på en kolumnrubrik för att sortera, och välj artikelgrupp i rullistan i tabellhuvudet.</p>
     <div class="grid auto">
       <label class="f">Sök artikel
         <span class="inp"><input id="pf-q" type="search" placeholder="Nummer, benämning eller grupp"></span></label>
@@ -616,7 +618,7 @@ $('copy').addEventListener('click',function(){
 function flash(b,msg){var o=b.dataset.o||(b.dataset.o=b.textContent); b.textContent=msg; setTimeout(function(){b.textContent=o},1400)}
 
 /* Prisfil: läs in artikelpriser från Visma, ändra dem och skriv ut en fil i samma format. */
-var pfSort={k:'',dir:1};
+var pfSort={k:'',dir:1}, pfGroup='';
 var PFKEY='renton-prisfil-v1', pf=null, pfLimit=200, pfTimer=null, pfStoreFail=false, pfMsg='';
 var ENC_NAME={'utf-8':'UTF-8','windows-1252':'Windows (ANSI)','cp850':'DOS (ASCII/OEM)','utf-16le':'Unicode (UTF-16)','utf-16be':'Unicode (UTF-16)'};
 var DELIM_NAME={'\t':'tabbavgränsad',';':'semikolonavgränsad',',':'kommaavgränsad','|':'avgränsad med lodstreck'};
@@ -886,6 +888,7 @@ function pfCell(i,k){var c=pf.map[k]; return c>-1?(pf.rows[i][c]||''):''}
 function pfFiltered(){
   var q=$('pf-q').value.trim().toLowerCase(), out=[];
   for(var i=pfStart();i<pf.rows.length;i++){
+    if(pfGroup&&(pfCell(i,'group').trim()||'__utan__')!==pfGroup) continue;
     if(!q||(pfCell(i,'art')+' '+pfCell(i,'name')+' '+pfCell(i,'group')).toLowerCase().indexOf(q)>-1) out.push(i);
   }
   if(pfSort.k){
@@ -909,6 +912,17 @@ function pfSortVal(i,k){
   if(k==='chg') return pfChanged(i)&&cur>0?v/cur-1:(isNaN(cur)?NaN:0);
   if(k==='tg') return v>0&&!isNaN(cost)?(v-cost)/v:NaN;
   return NaN;
+}
+function pfGroupTh(){
+  /* rullista som filtrerar tabellen på en artikelgrupp */
+  var seen={}, list=[], blank=false, i, g;
+  if(pf.map.group>-1) for(i=pfStart();i<pf.rows.length;i++){ g=pfCell(i,'group').trim(); if(!g) blank=true; else if(!seen[g]){seen[g]=1;list.push(g)} }
+  list.sort(function(a,b){return a.localeCompare(b,'sv',{numeric:true,sensitivity:'base'})});
+  if(blank) list.push('__utan__');
+  if(pfGroup&&list.indexOf(pfGroup)<0) pfGroup='';
+  if(!list.length) return '<th style="text-align:left">Artikelgrupp</th>';
+  return '<th style="text-align:left"><select id="pf-group" aria-label="Visa artikelgrupp"'+(pfGroup?' class="on"':'')+'><option value="">Artikelgrupp: alla</option>'+
+    list.map(function(g){return '<option value="'+esc(g)+'"'+(g===pfGroup?' selected':'')+'>'+(g==='__utan__'?'(utan grupp)':esc(g))+'</option>'}).join('')+'</select></th>';
 }
 function pfTh(k,label,left){
   var on=pfSort.k===k;
@@ -1013,8 +1027,8 @@ function pfRender(){
   $('pf-prev').innerHTML=prev+'</tbody>';
   var hasCost=m.cost>-1;
   $('pf-tg-f').hidden=!hasCost; $('pf-applytg').hidden=!hasCost;
-  if((pfSort.k==='cost'||pfSort.k==='tg')&&!hasCost) pfSort.k='';
-  $('pf-head').innerHTML='<tr>'+pfTh('art','Artikelnummer',1)+pfTh('name','Benämning',1)+pfTh('group','Artikelgrupp',1)+(hasCost?pfTh('cost','Inköpspris'):'')+pfTh('cur','Nuvarande pris')+pfTh('new','Nytt pris')+pfTh('chg','Ändring')+(hasCost?pfTh('tg','TG'):'')+'<th></th></tr>';
+  if(((pfSort.k==='cost'||pfSort.k==='tg')&&!hasCost)||pfSort.k==='group') pfSort.k='';
+  $('pf-head').innerHTML='<tr>'+pfTh('art','Artikelnummer',1)+pfTh('name','Benämning',1)+pfGroupTh()+(hasCost?pfTh('cost','Inköpspris'):'')+pfTh('cur','Nuvarande pris')+pfTh('new','Nytt pris')+pfTh('chg','Ändring')+(hasCost?pfTh('tg','TG'):'')+'<th></th></tr>';
   var list=pfFiltered(), rows='';
   list.slice(0,pfLimit).forEach(function(i){
     var cur=pfCur(i), v=pf.np[i];
@@ -1026,7 +1040,7 @@ function pfRender(){
       (hasCost?'<td id="pft-'+i+'">'+pfTgHtml(i)+'</td>':'')+
       '<td><button class="linkbtn" type="button" data-pfcalc="'+i+'">Till kalkyl</button></td></tr>';
   });
-  $('pf-body').innerHTML=rows||'<tr><td colspan="9" class="txt" style="color:var(--muted)">Inga artiklar matchar sökningen.</td></tr>';
+  $('pf-body').innerHTML=rows||'<tr><td colspan="9" class="txt" style="color:var(--muted)">Inga artiklar matchar urvalet.</td></tr>';
   txt('pf-shown','Visar '+fmt(Math.min(pfLimit,list.length))+' av '+fmt(list.length)+' artiklar.');
   $('pf-more').hidden=list.length<=pfLimit;
   pfSummary(); pfBanner();
@@ -1088,6 +1102,7 @@ $('pf-clear').addEventListener('click',function(){
 });
 $('panel-prisfil').addEventListener('change',function(e){
   var el=e.target; if(!pf) return;
+  if(el.id==='pf-group'){ pfGroup=el.value; pfLimit=200; pfRender(); if($('pf-group')) $('pf-group').focus(); return; }
   if(el.id==='pf-enc'){
     var by=pfEncode(pf.text); pf.enc=el.value; pf.bom=pfHasBom(by); pf.text=pfDecode(by,pf.enc); pfReparse();
   }
