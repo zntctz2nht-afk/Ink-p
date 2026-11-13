@@ -231,17 +231,23 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
         <span class="inp"><input id="markup" inputmode="decimal"><span class="u">%</span></span></label>
       <label class="f">Kampanjrabatt till ÅF
         <span class="inp"><input id="campaign" data-k="campaign" inputmode="decimal"><span class="u">%</span></span></label>
-      <label class="f">Rek. konsumentpris
+      <label class="f">Ordinarie försäljningspris
         <span class="inp"><input id="Rex" inputmode="decimal"><span class="u">kr</span></span></label>
       <label class="f">Konsumentpris inkl. moms
         <span class="inp"><input id="Rin" inputmode="decimal"><span class="u">kr</span></span></label>
-      <label class="f">ÅF-rabatt på konsumentpris
+      <label class="f">ÅF-rabatt på ordinarie pris
         <span class="inp"><input id="d" inputmode="decimal"><span class="u">%</span></span></label>
       <label class="f">Moms
         <span class="inp"><input id="vat" data-k="vat" inputmode="decimal"><span class="u">%</span></span></label>
       <label class="f full">Mål för täckningsgrad
         <span class="inp"><input id="targetTG" data-k="targetTG" inputmode="decimal"><span class="u">%</span></span></label>
     </div>
+    <h3 style="font-size:16px;margin-top:18px">Rabattsatser till återförsäljare</h3>
+    <p class="note" style="margin-top:4px">Rabatten räknas på ordinarie försäljningspris exkl. moms. Tryck på en rad för att låta den rabattsatsen styra ÅF-pris netto.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Rabattsats</th><th>ÅF-pris netto</th><th>TB/st</th><th>TG</th></tr></thead>
+      <tbody id="disc-table"></tbody></table></div>
+    <p class="note" id="disc-note"></p>
     <div class="chips">Avrunda konsumentpris inkl. moms:
       <button class="btn small" type="button" data-round="10">jämn tia</button>
       <button class="btn small" type="button" data-round="90">…90</button>
@@ -346,7 +352,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
         <label class="f">Inköpspris (valfritt)
           <span class="inp sel"><select data-pfmap="cost"></select></span></label>
         <label class="f">Priset i filen motsvarar
-          <span class="inp sel"><select id="pf-kind"><option value="N">ÅF-pris netto</option><option value="R">Rek. konsumentpris exkl. moms</option><option value="Rin">Konsumentpris inkl. moms</option></select></span></label>
+          <span class="inp sel"><select id="pf-kind"><option value="N">ÅF-pris netto</option><option value="R">Ordinarie försäljningspris exkl. moms</option><option value="Rin">Konsumentpris inkl. moms</option></select></span></label>
       </div>
       <label class="check"><input type="checkbox" id="pf-header"> Första raden är kolumnrubriker</label>
       <p class="note" id="pf-prevnote"></p>
@@ -409,6 +415,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 'use strict';
 var KEY='renton-priskalkyl-v1';
 var CURS=['EUR','USD','CNY','GBP','NOK','DKK'];
+var RATES=[20,30,35,40,50];
 var DEF={name:'Avhärdare 20 L med WiFi-ventil (exempel)',price:285,cur:'EUR',qty:50,supDisc:0,freight:6500,freightCur:'SEK',
   duty:0,other:35,overhead:5,fxBuf:2,N:5490,R:7996,campaign:0,vat:25,targetTG:35,step:'5',vol:120,
   cvAmt:1000,cvFrom:'EUR',cvTo:'SEK',
@@ -448,6 +455,10 @@ function calc(st,m){
     floor:cost/(1-Math.min(st.targetTG,99.9)/100)/(1-Math.min(st.campaign,99.9)/100)};
 }
 
+/* Vald rabattsats (s.disc) låser förhållandet mellan ordinarie pris och ÅF-pris netto. */
+function locked(){return typeof s.disc==='number'&&s.disc>=0&&s.disc<100}
+function fromN(){ if(locked()) s.R=s.N/(1-s.disc/100); }
+function fromR(){ if(locked()) s.N=s.R*(1-s.disc/100); }
 function opts(el,list){el.innerHTML=list.map(function(c){return '<option>'+c+'</option>'}).join('')}
 opts($('cur'),CURS.concat('SEK')); opts($('freightCur'),['SEK'].concat(CURS));
 opts($('cvFrom'),CURS.concat('SEK')); opts($('cvTo'),['SEK'].concat(CURS));
@@ -485,6 +496,13 @@ function render(){
 
   txt('p-neff',kr(c.neff)); txt('p-af',pct(c.af)+' · '+kr(c.afKr));
   txt('p-direct',pct(c.direct)+' · '+kr(s.R-c.cost)); txt('p-floor',kr(c.floor));
+
+  /* Rabattsatser */
+  $('disc-table').innerHTML=RATES.map(function(r){
+    var n=s.R*(1-r/100), x=calc(Object.assign({},s,{N:n})), on=locked()&&s.disc===r;
+    return '<tr class="'+(on?'now':'pick')+'" data-disc="'+r+'" tabindex="0"'+(on?' aria-current="true"':'')+'><td>'+r+' %'+(on?' <span class="pill good" style="margin-left:8px">Vald</span>':'')+'</td><td>'+kr(n)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+kr(x.tb)+'</td><td class="'+(x.tb<0?'neg':x.tg>=t?'ok':'')+'">'+pct(x.tg)+'</td></tr>';
+  }).join('');
+  $('disc-note').innerHTML=locked()?'ÅF-pris netto följer nu ordinarie pris med '+fmt(s.disc,0)+' % rabatt. Ändrar du ÅF-pris, täckningsgrad eller påslag räknas ordinarie pris om i stället. <button class="linkbtn" type="button" data-disc="">Släpp rabattsatsen</button>':'Ingen rabattsats är vald, så ÅF-pris netto och ordinarie pris ändras var för sig.';
 
   /* Prisstege */
   var step=num(s.step)/100, rows='';
@@ -539,12 +557,12 @@ document.addEventListener('input',function(e){
   if(el.dataset&&el.dataset.rate){ s.rates[el.dataset.rate]=num(el.value); render(); return; }
   var v=num(el.value), c=calc(s), camp=1-Math.min(s.campaign,99.9)/100;
   switch(el.id){
-    case 'N': s.N=v; break;
-    case 'tg': if(v<100) s.N=c.cost/(1-v/100)/camp; break;
-    case 'markup': s.N=c.cost*(1+v/100)/camp; break;
-    case 'd': s.N=s.R*(1-v/100); break;
-    case 'Rex': s.R=v; break;
-    case 'Rin': s.R=v/(1+s.vat/100); break;
+    case 'N': s.N=v; fromN(); break;
+    case 'tg': if(v<100){ s.N=c.cost/(1-v/100)/camp; fromN(); } break;
+    case 'markup': s.N=c.cost*(1+v/100)/camp; fromN(); break;
+    case 'd': s.disc=null; s.N=s.R*(1-v/100); break;
+    case 'Rex': s.R=v; fromR(); break;
+    case 'Rin': s.R=v/(1+s.vat/100); fromR(); break;
     default: return;
   }
   render();
@@ -552,7 +570,13 @@ document.addEventListener('input',function(e){
 document.addEventListener('change',function(e){ if(e.target.tagName==='SELECT') e.target.dispatchEvent(new Event('input',{bubbles:true})); });
 document.addEventListener('focusout',function(){ setTimeout(render,0); });
 
-function pickRow(tr){ if(tr&&tr.classList.contains('pick')){ s.N=Math.round(parseFloat(tr.dataset.n)); render(); } }
+function pickDisc(el){
+  if(!el||el.dataset.disc===undefined) return;
+  s.disc=el.dataset.disc===''?null:+el.dataset.disc; fromR(); render();
+}
+$('panel-pris').addEventListener('click',function(e){pickDisc(e.target.closest('[data-disc]'))});
+$('disc-table').addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();pickDisc(e.target.closest('tr'));var r=document.querySelector('#disc-table tr.now');if(r)r.focus()} });
+function pickRow(tr){ if(tr&&tr.classList.contains('pick')){ s.N=Math.round(parseFloat(tr.dataset.n)); fromN(); render(); } }
 $('ladder').addEventListener('click',function(e){pickRow(e.target.closest('tr'))});
 $('ladder').addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();pickRow(e.target.closest('tr'))} });
 
@@ -562,7 +586,7 @@ document.querySelectorAll('[data-round]').forEach(function(b){
     if(m===10) y=Math.round(x/10)*10;
     else if(m===100) y=Math.round(x/100)*100;
     else y=Math.round((x-m)/100)*100+m;
-    s.R=y/(1+s.vat/100); render();
+    s.R=y/(1+s.vat/100); fromR(); render();
   });
 });
 
@@ -915,7 +939,7 @@ function pfSummary(){
 /* Koppling mellan en artikel i prisfilen och kalkylen: pf.link är radens index. */
 function pfLinked(){return !!pf&&pf.link!=null&&!!pf.rows[pf.link]&&pf.map.price>-1}
 function pfKindVal(){return pf.kind==='N'?s.N:pf.kind==='R'?s.R:calc(s).rin}
-function pfKindLabel(){return pf.kind==='N'?'ÅF-pris netto':pf.kind==='R'?'rek. konsumentpris':'konsumentpris inkl. moms'}
+function pfKindLabel(){return pf.kind==='N'?'ÅF-pris netto':pf.kind==='R'?'ordinarie försäljningspris':'konsumentpris inkl. moms'}
 function pfToCalc(v){
   /* lägger filens pris i kalkylen och behåller ÅF-rabatten, så att det andra priset följer med */
   if(!(v>0)) return;
