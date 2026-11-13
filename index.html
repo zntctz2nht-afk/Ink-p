@@ -118,6 +118,12 @@ tr.main td{border-bottom:0;padding-bottom:4px}
 tr.noterow td{padding-top:0;padding-bottom:12px}
 td textarea{font:inherit;font-size:14px;color:inherit;width:100%;max-width:640px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:6px 8px;resize:vertical;line-height:1.35;display:block;white-space:pre-wrap}
 td input.tin{width:100%;min-width:150px;text-align:left}
+td select.sin{font:inherit;font-weight:600;color:inherit;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:6px 8px}
+.evmx{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-start}
+.evmx textarea{flex:1 1 320px}
+.offers{margin-top:8px}
+.offers table{width:auto;font-size:13px}
+.offers td,.offers th{padding:4px 6px;border-bottom:0;text-align:left}
 td input.nin{width:100px;text-align:left}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
 .stats div{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
@@ -462,6 +468,16 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     </div>
     <div class="chips"><button class="btn primary" type="button" id="pf-export">Skapa prisfil</button><span id="pf-exnote"></span></div>
     <p class="note">Välj det format som Vismas import tar emot. Ta en säkerhetskopia i Visma innan du läser in filen, och läs in den med samma fältordning som vid exporten.</p>
+
+    <h2 style="margin-top:24px">Prislista till återförsäljare</h2>
+    <p class="lead">Skapa en Excel-prislista med ÅF-pris netto för en rabattsats, räknat på ordinarie försäljningspris. Listan innehåller de artiklar som visas i tabellen ovan, så välj artikelgrupp eller sök först om bara en del ska med.</p>
+    <div class="grid auto">
+      <label class="f">Rabattsats
+        <span class="inp sel"><select id="pf-af-rate"></select></span></label>
+      <label class="f">Priser
+        <span class="inp sel"><select id="pf-af-src"><option value="new">Nya priser där de finns</option><option value="cur">Nuvarande priser</option></select></span></label>
+    </div>
+    <div class="chips"><button class="btn primary" type="button" id="pf-af-go">Skapa ÅF-prislista</button><span id="pf-af-note"></span></div>
   </section>
 </div>
 
@@ -485,7 +501,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 <div class="wrap panel" role="tabpanel" id="panel-evm" aria-labelledby="tab-evm" hidden>
   <section class="card wide">
     <h2>EVM – eget varumärke</h2>
-    <p class="lead">Lista de artiklar som kan ingå i det egna varumärket, med egna benämningar och priser. Skriv försäljningspriset exklusive eller inklusive moms, så räknas det andra fram. TB och TG räknas på priset exklusive moms. Listan sparas i den här webbläsaren.</p>
+    <p class="lead">Lista de artiklar som kan ingå i det egna varumärket, med egna benämningar och priser. Sätt status och lägg in offerter från flera leverantörer för att jämföra dem; "Välj" gör offerten till artikelns leverantör och inköpspris. Skriv försäljningspriset exklusive eller inklusive moms, så räknas det andra fram. TB och TG räknas på priset exklusive moms. Listan sparas i den här webbläsaren.</p>
     <div class="scroll" style="margin-top:0"><table>
       <thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th style="text-align:left">Leverantör</th><th>Inköpspris</th><th>Pris exkl. moms</th><th>Pris inkl. moms</th><th>TB</th><th>TG</th><th></th></tr></thead>
       <tbody id="evm-body"></tbody></table></div>
@@ -1157,6 +1173,8 @@ function pfRender(){
   fs.innerHTML=isX?'<option value="xlsx">Excel (.xlsx)</option><option value="tab">Textfil, tabbavgränsad</option><option value="semi">Textfil, semikolonavgränsad</option>'
     :'<option value="same">Samma format som den inlästa filen</option><option value="xlsx">Excel (.xlsx)</option>';
   fs.dataset.src=pf.src||'text'; if(fv) fs.value=fv;
+  if(!$('pf-af-rate').options.length) $('pf-af-rate').innerHTML=RATES.map(function(r){return '<option value="'+r+'"'+(r===35?' selected':'')+'>'+r+' %</option>'}).join('')+'<option value="all">Alla satser i samma fil</option>';
+  $('pf-af-go').disabled=pf.kind==='N'; txt('pf-af-note',pf.kind==='N'?'Priset i filen är angivet som ÅF-pris netto. Välj ordinarie försäljningspris under "Priset i filen motsvarar" för att kunna skapa en ÅF-prislista.':'');
   $('pf-delim').value=pf.delim; $('pf-enc').value=pf.enc; if(pf.map.group===undefined) pf.map.group=-1; $('pf-header').checked=pf.header; $('pf-kind').value=pf.kind;
   document.querySelectorAll('[data-pfmap]').forEach(function(sel){
     var k=sel.dataset.pfmap, h=(k==='cost'||k==='name'||k==='group')?'<option value="-1">Ingen</option>':'';
@@ -1292,6 +1310,19 @@ $('panel-prisfil').addEventListener('click',function(e){
     pfLinkTo(+b.dataset.pfcalc); return;
   }else if(b.dataset.pfgo){ showTab(b.dataset.pfgo); return;
   }else if(b.dataset.pfunlink){ pf.link=null;
+  }else if(b.id==='pf-af-go'){
+    if(pf.map.price<0){ txt('pf-af-note','Välj först vilken kolumn som är priset.'); return; }
+    var rate=$('pf-af-rate').value, useNew=$('pf-af-src').value==='new', rs=rate==='all'?RATES:[+rate], hasG=pf.map.group>-1, n2=0;
+    var St=function(x){return {v:x==null?'':String(x),n:false}}, Nu=function(x){return isFinite(x)?{v:Math.round(x*100)/100,n:true}:{v:'',n:false}};
+    var out=[['Artikelnummer','Benämning'].concat(hasG?['Artikelgrupp']:[],['Ordinarie pris exkl. moms'],rs.map(function(r){return 'ÅF-pris netto '+r+' %'}),['Rek. pris inkl. moms']).map(St)];
+    pfFiltered().forEach(function(i){
+      var ord=useNew&&pf.np[i]!==undefined?pf.np[i]:pfCur(i); if(!(ord>0)) return;
+      if(pf.kind==='Rin') ord=ord/vatF();
+      n2++; out.push([St(pfCell(i,'art')),St(pfCell(i,'name'))].concat(hasG?[St(pfCell(i,'group'))]:[],[Nu(ord)],rs.map(function(r){return Nu(ord*(1-r/100))}),[Nu(ord*vatF())]));
+    });
+    if(!n2){ txt('pf-af-note','Inga artiklar med pris visas i tabellen.'); return; }
+    var afn='af-prislista-'+(rate==='all'?'alla':rate)+'.xlsx';
+    download(xlsxWrite(out,'ÅF-prislista'),afn); txt('pf-af-note',afn+' skapad med '+fmt(n2)+' artiklar.'); return;
   }else if(b.id==='pf-export'){
     if(pf.map.price<0){ txt('pf-exnote','Välj först vilken kolumn som är priset.'); return; }
     var only=$('pf-which').value==='changed', f=$('pf-fmt').value, isXl=f==='xlsx';
@@ -1363,8 +1394,12 @@ function supSave(){
   if(importing) return Promise.resolve();
   return idbDo('readwrite',function(st){return st.put(sups,'suppliers')}).then(function(){supDbFail=false},function(){supDbFail=true}).then(supStatus);
 }
+function bkAge(){ var v=0; try{v=+localStorage.getItem('me-portalen-backup')||0}catch(e){} return v?Math.floor((Date.now()-v)/86400000):-1; }
 function supStatus(msg){
-  txt('sup-status',msg||(supDbFail?'Webbläsaren tillåter inte lagring här, så leverantörer och filer försvinner när sidan stängs.':''));
+  var age=bkAge(), has=sups.some(function(sp){return sp.files.length||sp.invoices.length});
+  txt('sup-status',msg||(supDbFail?'Webbläsaren tillåter inte lagring här, så leverantörer och filer försvinner när sidan stängs.':
+    has&&(age<0||age>=14)?(age<0?'Du har inte tagit någon säkerhetskopia än.':'Senaste säkerhetskopian är '+age+' dagar gammal.')+' Fakturor och prislistor finns bara i den här webbläsaren – ladda ned en säkerhetskopia på fliken Sparade.':''));
+  if($('bk-status')&&!$('bk-status').textContent) txt('bk-status',age<0?'Ingen säkerhetskopia är tagen från den här enheten.':'Senaste säkerhetskopia: '+(age===0?'i dag':age===1?'i går':age+' dagar sedan')+'.');
 }
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
 function supFind(sid){for(var i=0;i<sups.length;i++) if(sups[i].id===sid) return sups[i]; return null}
@@ -2074,6 +2109,7 @@ $('bk-export').addEventListener('click',function(){
     chain.then(function(){
       var fn='me-portalen-'+new Date().toLocaleDateString('sv-SE')+'.json';
       download(new Blob([JSON.stringify(out)],{type:'application/json'}),fn);
+      try{localStorage.setItem('me-portalen-backup',String(Date.now()))}catch(e){}
       txt('bk-status',fn+' skapad.'+(miss?' '+miss+' originalfiler saknades och kom inte med.':''));
     }).catch(function(){txt('bk-status','Det gick inte att skapa säkerhetskopian.')}).then(function(){btn.disabled=false});
   },400);
@@ -2130,6 +2166,7 @@ $('panel-snabb').addEventListener('focusout',function(){ setTimeout(qRender,0); 
 qRender();
 
 /* EVM: egen artikellista för planering av eget varumärke. */
+var EVM_ST=[['','Status: inte satt'],['ide','Idé'],['offert','Offert begärd'],['prov','Prov beställt'],['beslutad','Beslutad'],['avfardad','Avfärdad']];
 function evmCalc(it){
   var ok=typeof it.cost==='number'&&typeof it.price==='number', tb=ok?it.price-it.cost:NaN;
   return {tb:tb,tg:ok&&it.price>0?tb/it.price:NaN};
@@ -2139,10 +2176,11 @@ function evmCells(i){
   $('evm-tb-'+i).className=cls; $('evm-tg-'+i).className=cls;
   txt('evm-tb-'+i,isNaN(x.tb)?'–':kr2(x.tb)); txt('evm-tg-'+i,isNaN(x.tg)?'–':pct(x.tg));
 }
+function evmStatus(it){ var r=''; EVM_ST.forEach(function(x){ if(x[0]&&x[0]===it.status) r=x[1]; }); return r; }
 function evmSummary(){
   var n=0,sum=0,min=Infinity,minName='';
   evm.forEach(function(it){ var x=evmCalc(it); if(!isNaN(x.tg)){ n++; sum+=x.tg; if(x.tg<min){min=x.tg;minName=it.name||it.nr||'namnlös artikel'} } });
-  txt('evm-sum',evm.length?fmt(evm.length)+' artiklar'+(n?' · genomsnittlig TG '+pct(sum/n)+' · lägst TG '+pct(min)+' ('+minName+')':'')+'.':'');
+  txt('evm-sum',evm.length?fmt(evm.length)+' artiklar'+(n?' · genomsnittlig TG '+pct(sum/n)+' · lägst TG '+pct(min)+' ('+minName+')':'')+(function(){var c={},o=[];evm.forEach(function(it){var st=evmStatus(it);if(st)c[st]=(c[st]||0)+1});for(var k in c)o.push(c[k]+' '+k.toLowerCase());return o.length?' · '+o.join(', '):''})()+'.':'');
   txt('evm-count',evm.length?String(evm.length):'');
   $('evm-empty').style.display=evm.length?'none':'block';
   $('evm-xlsx').hidden=!evm.length;
@@ -2158,10 +2196,29 @@ function evmRender(){
       '<td><input data-evm="'+i+'" data-f="pin" inputmode="decimal" aria-label="Försäljningspris inkl. moms" value="'+pv(typeof it.price==='number'?it.price*vatF():null)+'"></td>'+
       '<td id="evm-tb-'+i+'"></td><td id="evm-tg-'+i+'"></td>'+
       '<td><button class="linkbtn" type="button" data-evmdel="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>'+
-      '<tr class="noterow"><td colspan="9"><textarea rows="'+Math.min(6,Math.max(1,String(it.note||'').split('\n').length))+'" data-evm="'+i+'" data-f="note" aria-label="Kommentar" placeholder="Kommentar eller anteckning om artikeln">'+esc(it.note||'')+'</textarea></td></tr>';
+      '<tr class="noterow"><td colspan="9"><div class="evmx">'+
+        '<select class="sin" data-evm="'+i+'" data-f="status" aria-label="Status">'+EVM_ST.map(function(x){return '<option value="'+x[0]+'"'+((it.status||'')===x[0]?' selected':'')+'>'+x[1]+'</option>'}).join('')+'</select>'+
+        '<textarea rows="'+Math.min(6,Math.max(1,String(it.note||'').split('\n').length))+'" data-evm="'+i+'" data-f="note" aria-label="Kommentar" placeholder="Kommentar eller anteckning om artikeln">'+esc(it.note||'')+'</textarea></div>'+
+        '<div class="offers">'+((it.offers||[]).length?'<table><thead><tr><th>Offert från</th><th>Pris</th><th>Valuta</th><th>≈ kr</th><th>Minsta order</th><th>Anteckning</th><th></th></tr></thead><tbody>'+it.offers.map(function(o,j){
+          var at=' data-evm="'+i+'" data-off="'+j+'"';
+          return '<tr><td><input class="nin" style="width:150px" list="sup-names"'+at+' data-of="sup" aria-label="Leverantör" value="'+esc(o.sup||'')+'"></td>'+
+            '<td><input'+at+' data-of="price" inputmode="decimal" aria-label="Offertpris" value="'+pv(o.price)+'"></td>'+
+            '<td><select class="sin"'+at+' data-of="cur" aria-label="Valuta">'+['SEK'].concat(CURS).map(function(c){return '<option'+(c===(o.cur||'SEK')?' selected':'')+'>'+c+'</option>'}).join('')+'</select></td>'+
+            '<td style="text-align:right;white-space:nowrap"><span id="evm-okr-'+i+'-'+j+'"></span> <span class="pill good" id="evm-low-'+i+'-'+j+'" hidden>Lägst</span></td>'+
+            '<td><input class="nin"'+at+' data-of="moq" aria-label="Minsta order" value="'+esc(o.moq||'')+'"></td>'+
+            '<td><input class="nin" style="width:170px"'+at+' data-of="note" aria-label="Anteckning" value="'+esc(o.note||'')+'"></td>'+
+            '<td style="white-space:nowrap"><button class="linkbtn" type="button" data-evmoffpick="'+i+'" data-off="'+j+'">Välj</button><button class="linkbtn" type="button" data-evmoffdel="'+i+'" data-off="'+j+'" style="color:var(--crit)">Ta bort</button></td></tr>';
+        }).join('')+'</tbody></table>':'')+
+        '<button class="linkbtn" type="button" data-evmoffadd="'+i+'">Lägg till offert</button></div></td></tr>';
   }).join('');
-  evm.forEach(function(it,i){evmCells(i)});
+  evm.forEach(function(it,i){evmCells(i);evmOffers(i)});
   evmSummary();
+}
+function evmOffers(i){
+  /* räknar om offerterna till kronor och märker den lägsta */
+  var offs=evm[i].offers||[], krs=offs.map(function(o){return typeof o.price==='number'?o.price*rateOf(o.cur||'SEK'):NaN}), min=Infinity, n=0;
+  krs.forEach(function(k){ if(isFinite(k)){ n++; if(k<min) min=k; } });
+  offs.forEach(function(o,j){ var c=$('evm-okr-'+i+'-'+j), l=$('evm-low-'+i+'-'+j); if(c) c.textContent=isFinite(krs[j])?fmt(krs[j],2):'–'; if(l) l.hidden=!(n>1&&krs[j]===min); });
 }
 function download(blob,fn){
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fn;
@@ -2170,25 +2227,40 @@ function download(blob,fn){
 $('panel-evm').addEventListener('input',function(e){
   var el=e.target; if(el.dataset.evm===undefined) return;
   var i=+el.dataset.evm, f=el.dataset.f;
+  if(el.dataset.of){
+    var o=evm[i].offers[+el.dataset.off], ok=el.dataset.of;
+    o[ok]=ok==='price'?(el.value.trim()===''?null:num(el.value)):el.value;
+    evmOffers(i); persist(); return;
+  }
   var val=el.value.trim()===''?null:num(el.value), other;
   if(f==='pin'){ evm[i].price=val===null?null:val/vatF(); other=document.querySelector('[data-evm="'+i+'"][data-f="price"]'); if(other) other.value=val===null?'':plain(evm[i].price,2); }
-  else if(f==='nr'||f==='name'||f==='sup'||f==='note') evm[i][f]=el.value;
+  else if(f==='nr'||f==='name'||f==='sup'||f==='note'||f==='status') evm[i][f]=el.value;
   else{ evm[i][f]=val; if(f==='price'){ other=document.querySelector('[data-evm="'+i+'"][data-f="pin"]'); if(other) other.value=val===null?'':plain(val*vatF(),2); } }
   evmCells(i); evmSummary(); persist();
 });
 $('panel-evm').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
   if(b.id==='evm-add'){
-    evm.push({nr:'',name:'',sup:'',cost:null,price:null,note:''}); evmRender(); persist();
+    evm.push({nr:'',name:'',sup:'',cost:null,price:null,note:'',status:'',offers:[]}); evmRender(); persist();
     var inp=document.querySelector('[data-evm="'+(evm.length-1)+'"][data-f="name"]'); if(inp) inp.focus();
   }else if(b.dataset.evmdel!==undefined){
     var it=evm[+b.dataset.evmdel];
     if((it.name||it.nr||it.sup||it.note||it.cost!=null||it.price!=null)&&!confirm('Ta bort '+(it.name||it.nr||'artikeln')+'?')) return;
     evm.splice(+b.dataset.evmdel,1); evmRender(); persist();
+  }else if(b.dataset.evmoffadd!==undefined){
+    var ia=+b.dataset.evmoffadd; evm[ia].offers=evm[ia].offers||[]; evm[ia].offers.push({sup:'',price:null,cur:'SEK',moq:'',note:''}); evmRender(); persist();
+    var fo=document.querySelector('[data-evm="'+ia+'"][data-off="'+(evm[ia].offers.length-1)+'"][data-of="sup"]'); if(fo) fo.focus();
+  }else if(b.dataset.evmoffdel!==undefined){
+    evm[+b.dataset.evmoffdel].offers.splice(+b.dataset.off,1); evmRender(); persist();
+  }else if(b.dataset.evmoffpick!==undefined){
+    /* vald offert blir artikelns leverantör och inköpspris i kronor */
+    var ip=+b.dataset.evmoffpick, op=evm[ip].offers[+b.dataset.off], kp=typeof op.price==='number'?op.price*rateOf(op.cur||'SEK'):NaN;
+    evm[ip].sup=op.sup||evm[ip].sup; if(isFinite(kp)) evm[ip].cost=Math.round(kp*100)/100;
+    evmRender(); persist();
   }else if(b.id==='evm-xlsx'){
     var S=function(v){return {v:v||'',n:false}}, N=function(v){return typeof v==='number'&&isFinite(v)?{v:Math.round(v*10000)/10000,n:true}:{v:'',n:false}};
-    var rows=[['Artikelnummer','Benämning','Leverantör','Inköpspris','Försäljningspris exkl. moms','Försäljningspris inkl. moms','TB','TG %','Kommentar'].map(S)];
-    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),S(it.sup),N(it.cost),N(it.price),N(typeof it.price==='number'?it.price*vatF():null),N(x.tb),N(x.tg*100),S(it.note)]); });
+    var rows=[['Artikelnummer','Benämning','Leverantör','Inköpspris','Försäljningspris exkl. moms','Försäljningspris inkl. moms','TB','TG %','Status','Offerter','Kommentar'].map(S)];
+    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),S(it.sup),N(it.cost),N(it.price),N(typeof it.price==='number'?it.price*vatF():null),N(x.tb),N(x.tg*100),S(evmStatus(it)),S((it.offers||[]).map(function(o){return (o.sup||'okänd')+' '+(typeof o.price==='number'?plain(o.price,2):'?')+' '+(o.cur||'SEK')+(o.moq?' (min '+o.moq+')':'')}).join('; ')),S(it.note)]); });
     download(xlsxWrite(rows,'EVM'),'evm-artiklar.xlsx');
   }
 });
