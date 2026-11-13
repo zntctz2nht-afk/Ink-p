@@ -110,6 +110,7 @@ td.chg{font-weight:600}
 #sup-list td input.lnk{width:230px;text-align:left}
 h3.sub{font-size:16px;margin-top:22px;padding-top:14px;border-top:1px solid var(--line)}
 details.raw{margin-top:12px;font-size:14px}
+textarea.ta{font:inherit;font-size:14px;color:inherit;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--field);padding:8px 10px;resize:vertical;line-height:1.35;display:block}
 details.raw summary{cursor:pointer;color:var(--accent);font-weight:600}
 tr.hist>td{background:var(--field);padding:10px 12px}
 tr.hist table{font-size:13px}
@@ -1350,7 +1351,7 @@ function supStatus(msg){
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
 function supFind(sid){for(var i=0;i<sups.length;i++) if(sups[i].id===sid) return sups[i]; return null}
 function supUiOf(sid){return supUi[sid]||(supUi[sid]={open:null,q:'',limit:100,msg:'',openInv:null,imsg:''})}
-function supNorm(sp){ sp.files=sp.files||[]; sp.invoices=sp.invoices||[]; sp.links=sp.links||{}; return sp; }
+function supNorm(sp){ sp.files=sp.files||[]; sp.invoices=sp.invoices||[]; sp.links=sp.links||{}; sp.info=sp.info||{}; return sp; }
 function fmtSize(n){return n>=1048576?fmt(n/1048576,1)+' MB':fmt(Math.max(1,Math.round(n/1024)))+' kB'}
 
 /* PDF-läsning: pdf.js laddas först när en PDF laddas upp, i första hand från mappen vendor bredvid sidan. */
@@ -1456,6 +1457,7 @@ function supAddFiles(sid,files,asInvoice){
               else{ sp.files.push(rec); ui.open=id; ui.q=''; ui.limit=100; }
               if(!res.rows.length) bad.push(f.name+' (ingen text hittades – är det en inskannad bild?)');
               else if(asInvoice&&!invLines(sp,rec).length) bad.push(f.name+' (inga fakturarader hittades – kontrollera kolumnvalen)');
+              else if(asInvoice&&invDup(sp,rec)) bad.push(f.name+' (samma fakturanummer som '+invDup(sp,rec).name+' – möjlig dubblett)');
             });
         });
       }).catch(function(e){
@@ -1489,9 +1491,20 @@ function invInit(sp,inv){
     for(i=0;i<lines.length&&!inv.date;i++){ if(re.test(lines[i])){ inv.date=normDate(DATE.exec(lines[i])); } }
   });
   for(i=0;i<lines.length&&!inv.cur;i++){ m=/\b(SEK|EUR|USD|GBP|NOK|DKK|CNY)\b/.exec(lines[i]); if(m) inv.cur=m[1]; else if(/€/.test(lines[i])) inv.cur='EUR'; else if(/£/.test(lines[i])) inv.cur='GBP'; else if(/\$/.test(lines[i])) inv.cur='USD'; }
-  if(!inv.cur) inv.cur=sp.invoices.length?sp.invoices[sp.invoices.length-1].cur:'SEK';
+  if(!inv.cur) inv.cur=sp.info.cur||(sp.invoices.length?sp.invoices[sp.invoices.length-1].cur:'SEK');
   var nc=0; inv.rows.slice(0,300).forEach(function(r){nc=Math.max(nc,r.length)});
   if(sp.invMap&&sp.invMapN===nc){ inv.map=JSON.parse(JSON.stringify(sp.invMap)); } else inv.map=invGuessMap(inv.rows,nc);
+  /* fraktrader utan artikelnummer blir fraktkostnad som fördelas på övriga rader */
+  var fr=0, any=false; inv.freight=null; inv.duty=null; inv.extra=[];
+  invLines(sp,inv).forEach(function(l){
+    if(!l.art&&/frakt|freight|fracht|shipping|transport|porto|versand/i.test(l.name)){ fr+=isNaN(l.total)?l.price:l.total; inv.skip[l.i]=1; any=true; }
+  });
+  if(any){ inv.freight=Math.round(fr*100)/100; inv.frAuto=true; }
+}
+function invDup(sp,inv){
+  var n=String(inv.number||'').trim().toLowerCase(), hit=null; if(!n) return null;
+  sp.invoices.forEach(function(x){ if(x!==inv&&String(x.number||'').trim().toLowerCase()===n) hit=x; });
+  return hit;
 }
 function invGuessMap(rows,nc){
   var best=null, bestScore=0;
@@ -1534,12 +1547,20 @@ function invLines(sp,inv){
     if(isNaN(total)&&!isNaN(qty)) total=qty*price;
     out.push({i:i,art:art,name:name,qty:qty,price:price,total:total,key:(art?art.toLowerCase():'d:'+name.toLowerCase())});
   });
+  (inv.extra||[]).forEach(function(x,n){
+    var q=x.qty==null?NaN:+x.qty, a=String(x.art||''), nm=String(x.name||'');
+    out.push({i:'x'+n,art:a,name:nm,qty:q,price:+x.price,total:isNaN(q)?NaN:q*x.price,key:(a?a.toLowerCase():'d:'+nm.toLowerCase()),manual:true});
+  });
+  /* hemtaget pris: frakt fördelas efter radbelopp, tull läggs på därefter */
+  var goods=0; out.forEach(function(l){ if(!isNaN(l.total)) goods+=l.total; });
+  var frs=inv.freight>0&&goods>0?inv.freight/goods:0, du=inv.duty>0?inv.duty/100:0;
+  out.forEach(function(l){ l.landed=l.price*(1+frs)*(1+du); });
   return out;
 }
 function invFind(sp,iid){for(var i=0;i<sp.invoices.length;i++) if(sp.invoices[i].id===iid) return sp.invoices[i]; return null}
 function invMeta(sp,inv){
   var ls=invLines(sp,inv), sum=0; ls.forEach(function(l){ if(!isNaN(l.total)) sum+=l.total; });
-  return (inv.number?'Faktura '+inv.number:'Fakturanummer saknas')+' · '+(inv.date||'datum saknas')+' · '+fmt(ls.length)+' rader · '+fmt(sum,2)+' '+inv.cur;
+  return (invDup(sp,inv)?'Möjlig dubblett · ':'')+(inv.number?'Faktura '+inv.number:'Fakturanummer saknas')+' · '+(inv.date||'datum saknas')+' · '+fmt(ls.length)+' rader · '+fmt(sum,2)+' '+inv.cur;
 }
 
 /* Mina artiklar: artiklarna i prisfilen och på EVM-fliken, som fakturarader kan kopplas till. */
@@ -1573,9 +1594,9 @@ function invTable(sid){
   var ls=invLines(sp,inv), nskip=0, k; for(k in inv.skip) if(inv.skip[k]) nskip++;
   var body=ls.map(function(l){
     var lk=sp.links[l.key];
-    return '<tr><td>'+esc(l.art)+'</td><td>'+esc(l.name)+'</td><td class="num">'+(isNaN(l.qty)?'':fmt(l.qty,Math.abs(l.qty-Math.round(l.qty))<1e-9?0:2))+'</td><td class="num">'+fmt(l.price,2)+'</td><td class="num">'+(isNaN(l.total)?'':fmt(l.total,2))+'</td>'+
+    return '<tr><td>'+esc(l.art)+'</td><td>'+esc(l.name)+'</td><td class="num">'+(isNaN(l.qty)?'':fmt(l.qty,Math.abs(l.qty-Math.round(l.qty))<1e-9?0:2))+'</td><td class="num">'+fmt(l.price,2)+'</td><td class="num">'+(isNaN(l.total)?'':fmt(l.total,2))+'</td><td class="num" id="ld-'+inv.id+'-'+l.i+'">'+fmt(l.landed,2)+'</td>'+
       '<td><input class="lnk" list="my-arts" data-linkkey="'+esc(l.key)+'"'+at+' aria-label="Min artikel för '+esc(l.art||l.name)+'" placeholder="Koppla till min artikel" value="'+esc(artLabel(lk))+'"></td>'+
-      '<td><button class="linkbtn" type="button" data-act="skipline" data-row="'+l.i+'"'+at+' style="color:var(--crit)">Ta bort rad</button></td></tr>';
+      '<td><button class="linkbtn" type="button" data-act="skipline" data-row="'+l.i+'"'+at+' style="color:var(--crit)">Ta bort rad</button>'+(l.manual?' <span class="meta" style="color:var(--muted);font-size:12px">egen rad</span>':'')+'</td></tr>';
   }).join('');
   var raw='<thead><tr>'; for(var c=0;c<nc;c++) raw+='<th style="text-align:left">Kolumn '+(c+1)+'</th>';
   raw+='</tr></thead><tbody>'+rows.slice(0,150).map(function(r){var h='<tr>';for(var c=0;c<nc;c++)h+='<td>'+esc(r[c]||'')+'</td>';return h+'</tr>'}).join('')+'</tbody>';
@@ -1584,11 +1605,21 @@ function invTable(sid){
       '<label class="f">Fakturanummer<span class="inp"><input data-invf="number"'+at+' value="'+esc(inv.number||'')+'"></span></label>'+
       '<label class="f">Fakturadatum<span class="inp"><input type="date" data-invf="date"'+at+' value="'+esc(inv.date||'')+'"></span></label>'+
       '<label class="f">Valuta<span class="inp sel"><select data-invf="cur"'+at+'>'+['SEK'].concat(CURS).map(function(c){return '<option'+(c===inv.cur?' selected':'')+'>'+c+'</option>'}).join('')+'</select></span></label>'+
+      '<label class="f">Frakt och övriga kostnader<span class="inp"><input data-invf="freight" inputmode="decimal"'+at+' value="'+(inv.freight!=null?plain(inv.freight,2):'')+'"><span class="u">'+inv.cur+'</span></span></label>'+
+      '<label class="f">Tull<span class="inp"><input data-invf="duty" inputmode="decimal"'+at+' value="'+(inv.duty!=null?plain(inv.duty,2):'')+'"><span class="u">%</span></span></label>'+
     '</div>'+
+    (invDup(sp,inv)?'<div class="banner" style="margin-top:12px"><span><b>Möjlig dubblett.</b> Fakturanumret finns redan på '+esc(invDup(sp,inv).name)+'. Ligger samma faktura inne två gånger räknas köpen dubbelt i registret.</span></div>':'')+
+    (inv.frAuto&&inv.freight>0?'<p class="note">Frakt på '+fmt(inv.freight,2)+' '+inv.cur+' hittades på fakturan. Den är borttagen som rad och fördelas i stället på övriga rader efter belopp.</p>':'')+
     '<p class="note">Kontrollera att uppgifterna ovan och kolumnvalen nedan stämmer med fakturan. Kolumnvalen kommer ihåg till nästa faktura från samma leverantör.</p>'+
     '<div class="grid auto">'+sel('art','Leverantörens artikelnummer')+sel('name','Benämning')+sel('qty','Antal')+sel('price','À-pris')+sel('total','Belopp')+'</div>'+
-    (ls.length?'<div class="scroll"><table><thead><tr><th>Lev. art.nr</th><th>Benämning</th><th style="text-align:right">Antal</th><th style="text-align:right">À-pris</th><th style="text-align:right">Belopp</th><th>Min artikel</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>'
+    (ls.length?'<div class="scroll"><table><thead><tr><th>Lev. art.nr</th><th>Benämning</th><th style="text-align:right">Antal</th><th style="text-align:right">À-pris</th><th style="text-align:right">Belopp</th><th style="text-align:right">Hemtaget/st</th><th>Min artikel</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>'
       :'<p class="note">Inga fakturarader hittades med de här kolumnvalen. En rad räknas när à-pris (och antal, om det är valt) är ett tal.</p>')+
+    '<div class="grid auto" style="margin-top:12px">'+
+      '<label class="f">Egen rad: artikelnummer<span class="inp"><input data-xf="art"></span></label>'+
+      '<label class="f">Benämning<span class="inp"><input data-xf="name"></span></label>'+
+      '<label class="f">Antal<span class="inp"><input data-xf="qty" inputmode="decimal"></span></label>'+
+      '<label class="f">À-pris<span class="inp"><input data-xf="price" inputmode="decimal"><span class="u">'+inv.cur+'</span></span></label>'+
+    '</div><div class="chips"><button class="btn small" type="button" data-act="addline"'+at+'>Lägg till egen rad</button><span>För rader som avläsningen missade.</span></div>'+
     (nskip?'<div class="chips"><span>'+nskip+(nskip===1?' rad är borttagen':' rader är borttagna')+' från registret.</span><button class="linkbtn" type="button" data-act="unskip"'+at+'>Återställ</button></div>':'')+
     '<details class="raw"><summary>Visa allt som lästes ur filen</summary><div class="scroll"><table>'+raw+'</table></div></details>'+
     (inv.kind==='PDF'?'<p class="note">Fakturan är tolkad ur PDF-filens text och kan innehålla fel. Jämför med originalet.</p>':'');
@@ -1602,7 +1633,7 @@ function regData(){
     var lk=sp.links[l.key], gk=lk?'A:'+(lk.nr||lk.name).toLowerCase():'S:'+sp.id+':'+l.key, g=groups[gk];
     if(!g){ g=groups[gk]={k:gk,linked:!!lk,title:lk?artLabel(lk):(l.art?l.art+' · ':'')+l.name,sup:{},items:[]}; list.push(g); }
     g.sup[sp.name]=1;
-    g.items.push({d:inv.date||'',inv:inv.number||inv.name,sup:sp.name,art:l.art,name:l.name,qty:l.qty,price:l.price,cur:inv.cur});
+    g.items.push({d:inv.date||'',inv:inv.number||inv.name,sup:sp.name,art:l.art,name:l.name,qty:l.qty,price:l.price,landed:l.landed,cur:inv.cur});
   }); }); });
   list.forEach(function(g){
     g.items.sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0});
@@ -1620,29 +1651,35 @@ function regRender(){
   var all=regData(), q=regUi.q.trim().toLowerCase();
   if(!all.length){ $('reg-body').innerHTML='<div class="empty">Registret är tomt. Lägg till en leverantör och ladda upp en faktura nedan.</div>'; return; }
   var list=all.filter(function(g){return (regUi.f==='all'||(regUi.f==='linked')===g.linked)&&(!q||g.search.indexOf(q)>-1)});
-  var h='<div class="scroll"><table><thead><tr><th>Artikel</th><th style="text-align:left">Leverantör</th><th>Senaste pris</th><th>≈ kr idag</th><th>Senast köpt</th><th>Förändring</th><th>Lägst–högst</th><th>Köp</th><th></th></tr></thead><tbody>';
+  var h='<div class="scroll"><table><thead><tr><th>Artikel</th><th style="text-align:left">Leverantör</th><th>Senaste pris</th><th>Hemtaget ≈ kr</th><th>Senast köpt</th><th>Förändring</th><th>Lägst–högst</th><th>Köp</th><th></th></tr></thead><tbody>';
   list.slice(0,regUi.limit).forEach(function(g){
-    var L=g.last, chg=g.prev&&g.prev.price>0?L.price/g.prev.price-1:NaN, open=!!regUi.open[g.k], kr1=L.price*rateOf(L.cur);
+    var L=g.last, chg=g.prev&&g.prev.price>0?L.price/g.prev.price-1:NaN, open=!!regUi.open[g.k], kr1=L.landed*rateOf(L.cur);
     h+='<tr><td class="txt">'+(g.linked?'':'<span class="pill warn" style="margin:0 6px 0 0">Ej kopplad</span>')+esc(g.title)+'</td><td style="text-align:left;white-space:normal">'+esc(g.sups)+'</td>'+
       '<td>'+fmt(L.price,2)+' '+L.cur+'</td><td>'+(isNaN(kr1)?'–':fmt(kr1,2))+'</td><td>'+esc(L.d||'–')+'</td>'+
       '<td class="'+(chg>0.0005?'neg':chg<-0.0005?'ok':'')+'">'+(isNaN(chg)?'–':(chg>0?'+':chg<0?'−':'')+fmt(Math.abs(chg*100),1)+' %')+'</td>'+
       '<td>'+(g.min===g.max?fmt(g.min,2):fmt(g.min,2)+'–'+fmt(g.max,2))+'</td><td>'+g.items.length+'</td>'+
       '<td><button class="linkbtn" type="button" data-reghist="'+esc(g.k)+'" aria-expanded="'+open+'">'+(open?'Dölj historik':'Historik')+'</button></td></tr>';
     if(open){
-      h+='<tr class="hist"><td colspan="9"><table><thead><tr><th>Datum</th><th style="text-align:left">Faktura</th><th style="text-align:left">Leverantör</th><th style="text-align:left">Lev. art.nr</th><th style="text-align:left">Benämning på fakturan</th><th>Antal</th><th>À-pris</th><th>≈ kr idag</th></tr></thead><tbody>'+
-        g.items.slice().reverse().map(function(x){ var k2=x.price*rateOf(x.cur);
+      h+='<tr class="hist"><td colspan="9"><table><thead><tr><th>Datum</th><th style="text-align:left">Faktura</th><th style="text-align:left">Leverantör</th><th style="text-align:left">Lev. art.nr</th><th style="text-align:left">Benämning på fakturan</th><th>Antal</th><th>À-pris</th><th>Hemtaget ≈ kr</th></tr></thead><tbody>'+
+        g.items.slice().reverse().map(function(x){ var k2=x.landed*rateOf(x.cur);
           return '<tr><td>'+esc(x.d||'–')+'</td><td style="text-align:left">'+esc(x.inv)+'</td><td style="text-align:left">'+esc(x.sup)+'</td><td style="text-align:left">'+esc(x.art)+'</td><td style="text-align:left;white-space:normal">'+esc(x.name)+'</td><td>'+(isNaN(x.qty)?'':fmt(x.qty,Math.abs(x.qty-Math.round(x.qty))<1e-9?0:2))+'</td><td>'+fmt(x.price,2)+' '+x.cur+'</td><td>'+(isNaN(k2)?'–':fmt(k2,2))+'</td></tr>';
         }).join('')+'</tbody></table></td></tr>';
     }
   });
   var nl=all.filter(function(g){return g.linked}).length;
-  $('reg-body').innerHTML=h+'</tbody></table></div><div class="chips"><span>Visar '+fmt(Math.min(regUi.limit,list.length))+' av '+fmt(list.length)+' artiklar. '+fmt(nl)+' av '+fmt(all.length)+' är kopplade till dina artiklar.</span>'+(list.length>regUi.limit?'<button class="btn small" type="button" id="reg-more">Visa fler</button>':'')+'</div>'+
-    '<p class="note">Förändring jämför de två senaste köpen i samma valuta. Rött betyder att inköpspriset har gått upp. Kronbeloppen räknas med dagens kurs på fliken Valuta.</p>';
+  $('reg-body').innerHTML=h+'</tbody></table></div><div class="chips"><span>Visar '+fmt(Math.min(regUi.limit,list.length))+' av '+fmt(list.length)+' artiklar. '+fmt(nl)+' av '+fmt(all.length)+' är kopplade till dina artiklar.</span>'+(list.length>regUi.limit?'<button class="btn small" type="button" id="reg-more">Visa fler</button>':'')+'<button class="btn small" type="button" id="reg-xlsx">Ladda ned registret som Excel</button></div>'+
+    '<p class="note">Förändring jämför de två senaste köpen i samma valuta. Rött betyder att inköpspriset har gått upp. Hemtaget pris är à-priset plus fakturans frakt och tull, omräknat med dagens kurs på fliken Valuta.</p>';
 }
 $('reg-q').addEventListener('input',function(){ regUi.q=this.value; regUi.limit=100; regRender(); });
 $('reg-f').addEventListener('change',function(){ regUi.f=this.value; regUi.limit=100; regRender(); });
 $('reg-body').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
+  if(b.id==='reg-xlsx'){
+    var S=function(v){return {v:v==null?'':String(v),n:false}}, N=function(v){return typeof v==='number'&&isFinite(v)?{v:Math.round(v*10000)/10000,n:true}:{v:'',n:false}};
+    var out=[['Artikel','Kopplad','Leverantör','Datum','Faktura','Lev. art.nr','Benämning på fakturan','Antal','À-pris','Valuta','Hemtaget à-pris','Hemtaget kr (dagens kurs)'].map(S)];
+    regData().forEach(function(g){ g.items.forEach(function(x){ out.push([S(g.title),S(g.linked?'Ja':'Nej'),S(x.sup),S(x.d),S(x.inv),S(x.art),S(x.name),N(x.qty),N(x.price),S(x.cur),N(x.landed),N(x.landed*rateOf(x.cur))]); }); });
+    download(xlsxWrite(out,'Inköpsregister'),'inkopsregister-'+new Date().toLocaleDateString('sv-SE')+'.xlsx'); return;
+  }
   if(b.id==='reg-more') regUi.limit+=200;
   else if(b.dataset.reghist!==undefined) regUi.open[b.dataset.reghist]=!regUi.open[b.dataset.reghist];
   else return;
@@ -1667,6 +1704,15 @@ function supTable(sid){
       (f.kind==='PDF'?'<p class="note">Listan är tolkad ur PDF-filens text. Kolumnerna kan hamna fel om prislistan har en ovanlig layout – jämför med originalet vid tveksamhet.</p>':'')
     :'<p class="note">Ingen text kunde läsas ur filen. Originalet finns kvar och går att öppna.</p>');
 }
+function supInfoHtml(sp,ui){
+  var i=sp.info, at=' data-sid="'+sp.id+'"', brief=[i.contact,i.terms,i.lead?'ledtid '+i.lead:''].filter(function(x){return x}).join(' · ');
+  var f=function(k,label,ph){return '<label class="f">'+label+'<span class="inp"><input data-supinfo="'+k+'"'+at+' value="'+esc(i[k]||'')+'"'+(ph?' placeholder="'+ph+'"':'')+'></span></label>'};
+  return '<details class="raw" data-supdet="'+sp.id+'"'+(ui.info?' open':'')+'><summary>Leverantörsuppgifter'+(brief?' <span style="color:var(--muted);font-weight:400">– '+esc(brief)+'</span>':'')+'</summary>'+
+    '<div class="grid auto" style="margin-top:10px">'+f('contact','Kontaktperson')+f('email','E-post')+f('phone','Telefon')+
+    '<label class="f">Valuta<span class="inp sel"><select data-supinfo="cur"'+at+'><option value="">Inte angiven</option>'+['SEK'].concat(CURS).map(function(c){return '<option'+(c===i.cur?' selected':'')+'>'+c+'</option>'}).join('')+'</select></span></label>'+
+    f('terms','Betalningsvillkor','t.ex. 30 dagar netto')+f('lead','Ledtid','t.ex. 3 veckor')+f('moq','Minsta order')+'</div>'+
+    '<label class="f" style="margin-top:12px">Anteckningar<textarea class="ta" rows="2" data-supinfo="note"'+at+'>'+esc(i.note||'')+'</textarea></label></details>';
+}
 function supRender(){
   var ACC='.pdf,.xlsx,.csv,.txt,.skv,.tsv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv';
   txt('sup-count',sups.length?String(sups.length):'');
@@ -1683,6 +1729,7 @@ function supRender(){
     return '<section class="card" aria-label="'+esc(sp.name)+'"><div class="cardhead"><h2>'+esc(sp.name)+'</h2><span>'+
       '<button class="linkbtn" type="button" data-act="rename"'+at+'>Byt namn</button>'+
       '<button class="linkbtn" type="button" data-act="delsup"'+at+' style="color:var(--crit)">Ta bort leverantör</button></span></div>'+
+      supInfoHtml(sp,ui)+
       '<h3 class="sub">Fakturor</h3>'+
       '<div class="chips"><input type="file" class="vh" id="sup-ifile-'+sp.id+'" data-supfile="'+sp.id+'" data-kind="inv" multiple accept="'+ACC+'">'+
       '<label class="btn primary" for="sup-ifile-'+sp.id+'">Ladda upp faktura</label><span>'+esc(ui.imsg||(sp.invoices.length?'':'Inga fakturor uppladdade än.'))+'</span></div>'+
@@ -1711,10 +1758,16 @@ $('sup-new').addEventListener('keydown',function(e){ if(e.key==='Enter') supAdd(
 $('sup-list').addEventListener('change',function(e){
   var el=e.target, d=el.dataset, sp, inv;
   if(d.supfile&&el.files&&el.files.length){ supAddFiles(d.supfile,el.files,d.kind==='inv'); return; }
-  sp=supFind(d.sid); inv=sp&&d.iid?invFind(sp,d.iid):null; if(!inv) return;
+  sp=supFind(d.sid);
+  if(sp&&d.supinfo){ sp.info[d.supinfo]=el.value.trim(); supSave(); return; }
+  inv=sp&&d.iid?invFind(sp,d.iid):null; if(!inv) return;
   if(d.invf){
-    /* bara registret och radens sammanfattning ritas om, så att fokus inte tappas i fälten */
-    inv[d.invf]=el.value.trim(); if($('inv-meta-'+inv.id)) txt('inv-meta-'+inv.id,invMeta(sp,inv)); regRender(); supSave();
+    /* bara registret, radernas sammanfattning och hemtaget pris ritas om, så att fokus inte tappas i fälten */
+    if(d.invf==='freight'||d.invf==='duty'){ inv[d.invf]=el.value.trim()===''?null:num(el.value); if(d.invf==='freight') inv.frAuto=false; }
+    else inv[d.invf]=el.value.trim();
+    sp.invoices.forEach(function(x){ if($('inv-meta-'+x.id)) txt('inv-meta-'+x.id,invMeta(sp,x)); });
+    invLines(sp,inv).forEach(function(l){ var c=$('ld-'+inv.id+'-'+l.i); if(c) c.textContent=fmt(l.landed,2); });
+    regRender(); supSave();
   }else if(d.invmap){
     var nc=0; inv.rows.slice(0,300).forEach(function(r){nc=Math.max(nc,r.length)});
     inv.map[d.invmap]=+el.value; sp.invMap=JSON.parse(JSON.stringify(inv.map)); sp.invMapN=nc;
@@ -1727,6 +1780,7 @@ $('sup-list').addEventListener('change',function(e){
     regRender(); supSave();
   }
 });
+$('sup-list').addEventListener('toggle',function(e){ var el=e.target; if(el.dataset&&el.dataset.supdet) supUiOf(el.dataset.supdet).info=el.open; },true);
 $('sup-list').addEventListener('input',function(e){
   var el=e.target; if(el.dataset.supq===undefined) return;
   var sid=el.dataset.supq, ui=supUiOf(sid), pos=el.selectionStart; ui.q=el.value; ui.limit=100; supTable(sid);
@@ -1743,8 +1797,17 @@ $('sup-list').addEventListener('click',function(e){
   else if(act==='more'){ ui.limit+=200; supTable(sid); }
   else if(act==='skipline'||act==='unskip'){
     inv=invFind(sp,b.dataset.iid); if(!inv) return;
-    if(act==='unskip') inv.skip={}; else inv.skip[b.dataset.row]=1;
+    if(act==='unskip'){ inv.skip={}; if(inv.frAuto){ inv.freight=null; inv.frAuto=false; } }
+    else if(String(b.dataset.row).charAt(0)==='x') inv.extra.splice(+String(b.dataset.row).slice(1),1);
+    else inv.skip[b.dataset.row]=1;
     invTable(sid); if($('inv-meta-'+inv.id)) txt('inv-meta-'+inv.id,invMeta(sp,inv)); regRender(); supSave();
+  }
+  else if(act==='addline'){
+    inv=invFind(sp,b.dataset.iid); if(!inv) return;
+    var box=$('sup-inv-'+sid), gv=function(k){var x=box.querySelector('[data-xf="'+k+'"]');return x?x.value.trim():''}, pr=gv('price');
+    if((!gv('art')&&!gv('name'))||pr===''){ ui.imsg='Fyll i benämning eller artikelnummer och ett à-pris för den egna raden.'; supRender(); return; }
+    inv.extra=inv.extra||[]; inv.extra.push({art:gv('art'),name:gv('name'),qty:gv('qty')===''?null:num(gv('qty')),price:num(pr)});
+    ui.imsg=''; supRender(); supSave();
   }
   else if(act==='rename'){ var nn=prompt('Leverantörens namn',sp.name); if(nn&&nn.trim()){ sp.name=nn.trim(); supRender(); supSave(); } }
   else if(act==='delsup'){
