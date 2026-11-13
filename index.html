@@ -100,8 +100,8 @@ td.chg{font-weight:600}
 tr.main td{border-bottom:0;padding-bottom:4px}
 tr.noterow td{padding-top:0;padding-bottom:12px}
 td textarea{font:inherit;font-size:14px;color:inherit;width:100%;max-width:640px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:6px 8px;resize:vertical;line-height:1.35;display:block;white-space:pre-wrap}
-td input.tin{width:100%;min-width:200px;text-align:left}
-td input.nin{width:120px;text-align:left}
+td input.tin{width:100%;min-width:150px;text-align:left}
+td input.nin{width:100px;text-align:left}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
 .stats div{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
 .stats .k{font-size:13px;color:var(--muted)}
@@ -202,12 +202,14 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 <div class="wrap narrow panel" role="tabpanel" id="panel-snabb" aria-labelledby="tab-snabb" hidden>
   <section class="card wide">
     <h2>Snabbkalkyl</h2>
-    <p class="lead">Fyll i två av fälten, så räknas det tredje fram. Det är alltid de två fält du senast skrev i som gäller, och det framräknade fältet har streckad ram. Priserna är exklusive moms.</p>
+    <p class="lead">Fyll i två av fälten, så räknas det tredje fram. Det är alltid de två fält du senast skrev i som gäller, och det framräknade fältet har streckad ram. Marginalen räknas på priset exklusive moms.</p>
     <div class="grid auto">
       <label class="f">Inköpspris
         <span class="inp"><input id="q-cost" inputmode="decimal"><span class="u">kr</span></span></label>
-      <label class="f">Försäljningspris
+      <label class="f">Försäljningspris exkl. moms
         <span class="inp"><input id="q-price" inputmode="decimal"><span class="u">kr</span></span></label>
+      <label class="f">Försäljningspris inkl. moms
+        <span class="inp"><input id="q-pin" inputmode="decimal"><span class="u">kr</span></span></label>
       <label class="f">Marginal (täckningsgrad)
         <span class="inp"><input id="q-tg" inputmode="decimal"><span class="u">%</span></span></label>
     </div>
@@ -221,7 +223,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <div class="scroll"><table>
       <thead><tr><th>Rabattsats</th><th>Pris efter rabatt</th><th>TB</th><th>TG</th></tr></thead>
       <tbody id="q-rates"></tbody></table></div>
-    <p class="note">Snabbkalkylen är fristående och påverkar inte övriga flikar.</p>
+    <p class="note">Snabbkalkylen är fristående och påverkar inte övriga flikar. Momssatsen hämtas från fältet Moms på fliken Prissättning.</p>
   </section>
 </div>
 
@@ -445,9 +447,9 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 <div class="wrap panel" role="tabpanel" id="panel-evm" aria-labelledby="tab-evm" hidden>
   <section class="card wide">
     <h2>EVM – eget varumärke</h2>
-    <p class="lead">Lista de artiklar som kan ingå i det egna varumärket, med egna benämningar och priser. Priserna är exklusive moms. Listan sparas i den här webbläsaren.</p>
+    <p class="lead">Lista de artiklar som kan ingå i det egna varumärket, med egna benämningar och priser. Skriv försäljningspriset exklusive eller inklusive moms, så räknas det andra fram. TB och TG räknas på priset exklusive moms. Listan sparas i den här webbläsaren.</p>
     <div class="scroll" style="margin-top:0"><table>
-      <thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th style="text-align:left">Leverantör</th><th>Inköpspris</th><th>Försäljningspris</th><th>TB</th><th>TG</th><th></th></tr></thead>
+      <thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th style="text-align:left">Leverantör</th><th>Inköpspris</th><th>Pris exkl. moms</th><th>Pris inkl. moms</th><th>TB</th><th>TG</th><th></th></tr></thead>
       <tbody id="evm-body"></tbody></table></div>
     <div class="empty" id="evm-empty">Inga artiklar än. Tryck på Lägg till artikel för att börja.</div>
     <div class="chips">
@@ -1237,6 +1239,7 @@ try{
 pfRender();
 
 /* Snabbkalkyl: fristående räknare för inköpspris, försäljningspris och täckningsgrad. */
+function vatF(){return 1+(s.vat||0)/100}
 function qRender(){
   /* det fält som inte är bland de två senast ändrade räknas fram ur de andra två */
   if(!Array.isArray(quick.last)||quick.last.length!==2) quick.last=['cost','price'];
@@ -1245,7 +1248,8 @@ function qRender(){
   else if(target==='price') quick.price=quick.cost/(1-tf);
   else quick.cost=quick.price*(1-tf);
   var c=quick.cost, pr=quick.price, tb=pr-c, tg=pr>0?tb/pr:NaN;
-  setIn('q-cost',plain(c,2)); setIn('q-price',plain(pr,2)); setIn('q-tg',plain(quick.tg,1));
+  setIn('q-cost',plain(c,2)); setIn('q-price',plain(pr,2)); setIn('q-pin',plain(pr*vatF(),2)); setIn('q-tg',plain(quick.tg,1));
+  $('q-pin').parentNode.classList.toggle('calc',target==='price');
   ['cost','price','tg'].forEach(function(k){ $('q-'+k).parentNode.classList.toggle('calc',k===target); });
   txt('q-note',target==='tg'?'Marginalen räknas fram ur inköpspris och försäljningspris.':target==='price'?'Försäljningspriset räknas fram ur inköpspris och marginal.':'Inköpspriset räknas fram: så mycket får varan högst kosta för att nå marginalen vid det försäljningspriset.');
   var neg=tb<0?' neg':'';
@@ -1257,9 +1261,9 @@ function qRender(){
   }).join('');
 }
 $('panel-snabb').addEventListener('input',function(e){
-  var el=e.target, k=el.id==='q-cost'?'cost':el.id==='q-price'?'price':el.id==='q-tg'?'tg':'';
+  var el=e.target, k=el.id==='q-cost'?'cost':(el.id==='q-price'||el.id==='q-pin')?'price':el.id==='q-tg'?'tg':'';
   if(!k) return;
-  quick[k]=num(el.value);
+  quick[k]=el.id==='q-pin'?num(el.value)/vatF():num(el.value);
   if(quick.last[0]!==k) quick.last=[k,quick.last[0]];
   qRender(); persist();
 });
@@ -1291,10 +1295,11 @@ function evmRender(){
       '<td class="txt"><input class="tin" data-evm="'+i+'" data-f="name" aria-label="Benämning" placeholder="Benämning" value="'+esc(it.name||'')+'"></td>'+
       '<td><input class="nin" style="width:160px" data-evm="'+i+'" data-f="sup" aria-label="Leverantör" value="'+esc(it.sup||'')+'"></td>'+
       '<td><input data-evm="'+i+'" data-f="cost" inputmode="decimal" aria-label="Inköpspris" value="'+pv(it.cost)+'"></td>'+
-      '<td><input data-evm="'+i+'" data-f="price" inputmode="decimal" aria-label="Försäljningspris" value="'+pv(it.price)+'"></td>'+
+      '<td><input data-evm="'+i+'" data-f="price" inputmode="decimal" aria-label="Försäljningspris exkl. moms" value="'+pv(it.price)+'"></td>'+
+      '<td><input data-evm="'+i+'" data-f="pin" inputmode="decimal" aria-label="Försäljningspris inkl. moms" value="'+pv(typeof it.price==='number'?it.price*vatF():null)+'"></td>'+
       '<td id="evm-tb-'+i+'"></td><td id="evm-tg-'+i+'"></td>'+
       '<td><button class="linkbtn" type="button" data-evmdel="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>'+
-      '<tr class="noterow"><td colspan="8"><textarea rows="'+Math.min(6,Math.max(1,String(it.note||'').split('\n').length))+'" data-evm="'+i+'" data-f="note" aria-label="Kommentar" placeholder="Kommentar eller anteckning om artikeln">'+esc(it.note||'')+'</textarea></td></tr>';
+      '<tr class="noterow"><td colspan="9"><textarea rows="'+Math.min(6,Math.max(1,String(it.note||'').split('\n').length))+'" data-evm="'+i+'" data-f="note" aria-label="Kommentar" placeholder="Kommentar eller anteckning om artikeln">'+esc(it.note||'')+'</textarea></td></tr>';
   }).join('');
   evm.forEach(function(it,i){evmCells(i)});
   evmSummary();
@@ -1306,7 +1311,10 @@ function download(blob,fn){
 $('panel-evm').addEventListener('input',function(e){
   var el=e.target; if(el.dataset.evm===undefined) return;
   var i=+el.dataset.evm, f=el.dataset.f;
-  evm[i][f]=(f==='nr'||f==='name'||f==='sup'||f==='note')?el.value:(el.value.trim()===''?null:num(el.value));
+  var val=el.value.trim()===''?null:num(el.value), other;
+  if(f==='pin'){ evm[i].price=val===null?null:val/vatF(); other=document.querySelector('[data-evm="'+i+'"][data-f="price"]'); if(other) other.value=val===null?'':plain(evm[i].price,2); }
+  else if(f==='nr'||f==='name'||f==='sup'||f==='note') evm[i][f]=el.value;
+  else{ evm[i][f]=val; if(f==='price'){ other=document.querySelector('[data-evm="'+i+'"][data-f="pin"]'); if(other) other.value=val===null?'':plain(val*vatF(),2); } }
   evmCells(i); evmSummary(); persist();
 });
 $('panel-evm').addEventListener('click',function(e){
@@ -1320,8 +1328,8 @@ $('panel-evm').addEventListener('click',function(e){
     evm.splice(+b.dataset.evmdel,1); evmRender(); persist();
   }else if(b.id==='evm-xlsx'){
     var S=function(v){return {v:v||'',n:false}}, N=function(v){return typeof v==='number'&&isFinite(v)?{v:Math.round(v*10000)/10000,n:true}:{v:'',n:false}};
-    var rows=[['Artikelnummer','Benämning','Leverantör','Inköpspris','Försäljningspris','TB','TG %','Kommentar'].map(S)];
-    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),S(it.sup),N(it.cost),N(it.price),N(x.tb),N(x.tg*100),S(it.note)]); });
+    var rows=[['Artikelnummer','Benämning','Leverantör','Inköpspris','Försäljningspris exkl. moms','Försäljningspris inkl. moms','TB','TG %','Kommentar'].map(S)];
+    evm.forEach(function(it){ var x=evmCalc(it); rows.push([S(it.nr),S(it.name),S(it.sup),N(it.cost),N(it.price),N(typeof it.price==='number'?it.price*vatF():null),N(x.tb),N(x.tg*100),S(it.note)]); });
     download(xlsxWrite(rows,'EVM'),'evm-artiklar.xlsx');
   }
 });
@@ -1333,6 +1341,8 @@ function showTab(name,focus){
   if(!TABS.some(function(b){return b.dataset.tab===name})) name='inkop';
   tab=name;
   if(name==='prisfil') pfRender();
+  if(name==='snabb') qRender();
+  if(name==='evm') evmRender();
   TABS.forEach(function(b){
     var on=b.dataset.tab===name;
     b.setAttribute('aria-selected',on?'true':'false'); b.tabIndex=on?0:-1;
