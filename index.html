@@ -316,16 +316,13 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 <div class="wrap narrow panel" role="tabpanel" id="panel-stege" aria-labelledby="tab-stege" hidden>
   <section class="card wide">
     <h2>Prisstege</h2>
-    <p class="lead">Testa olika ÅF-priser runt det nuvarande. Tryck på en rad för att använda priset.</p>
+    <p class="lead">Så blir ÅF-pris, marginal och årsvolym vid era rabattsatser på ordinarie försäljningspris. Tryck på en rad för att välja rabattsatsen.</p>
     <div class="grid">
-      <label class="f">Steg
-        <span class="inp"><select id="step" data-k="step" style="border-left:0;width:100%">
-          <option value="2.5">2,5 %</option><option value="5">5 %</option><option value="10">10 %</option></select></span></label>
-      <label class="f">Volym per år
+      <label class="f full">Volym per år
         <span class="inp"><input id="vol" data-k="vol" inputmode="decimal"><span class="u">st</span></span></label>
     </div>
     <div class="scroll"><table>
-      <thead><tr><th>ÅF-pris</th><th>ÅF-rabatt</th><th>TG</th><th>TB/st</th><th>TB/år</th></tr></thead>
+      <thead><tr><th>Rabattsats</th><th>ÅF-pris netto</th><th>TG</th><th>TB/st</th><th>TB/år</th></tr></thead>
       <tbody id="ladder"></tbody></table></div>
   </section>
 </div>
@@ -560,11 +557,13 @@ function render(){
   $('disc-note').innerHTML=locked()?'ÅF-pris netto följer nu ordinarie pris med '+fmt(s.disc,0)+' % rabatt. Ändrar du ÅF-pris, täckningsgrad eller påslag räknas ordinarie pris om i stället. <button class="linkbtn" type="button" data-disc="">Släpp rabattsatsen</button>':'Ingen rabattsats är vald, så ÅF-pris netto och ordinarie pris ändras var för sig.';
 
   /* Prisstege */
-  var step=num(s.step)/100, rows='';
-  for(var i=-3;i<=3;i++){
-    var st=Object.assign({},s,{N:s.N*(1+i*step)}), x=calc(st);
-    rows+='<tr class="'+(i===0?'now':'pick')+'" data-n="'+st.N+'" tabindex="'+(i===0?-1:0)+'"><td>'+kr(st.N)+(i?' <span style="color:var(--muted);font-weight:400">'+(i>0?'+':'−')+fmt(Math.abs(i*step*100),1)+' %</span>':'')+'</td><td>'+pct(x.d)+'</td><td class="'+(x.tb<0?'neg':x.tg>=t?'ok':'')+'">'+pct(x.tg)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+kr(x.tb)+'</td><td>'+kr(x.tb*s.vol)+'</td></tr>';
-  }
+  var rows='', steps=RATES.map(function(r){return {d:r,n:s.R*(1-r/100),rate:true}});
+  if(!steps.some(function(o){return Math.abs(o.n-s.N)<0.005})&&isFinite(c.d)) steps.push({d:c.d*100,n:s.N,rate:false});
+  steps.sort(function(a,b){return a.d-b.d});
+  steps.forEach(function(o){
+    var x=calc(Object.assign({},s,{N:o.n})), on=Math.abs(o.n-s.N)<0.005;
+    rows+='<tr class="'+(on?'now':'pick')+'"'+(o.rate?' data-disc="'+o.d+'" tabindex="0"':'')+'><td>'+fmt(o.d,o.rate?0:1)+' %'+(o.rate?(locked()&&s.disc===o.d?' <span class="pill good" style="margin-left:8px">Vald</span>':''):' <span style="color:var(--muted);font-weight:400">nuvarande pris</span>')+'</td><td>'+kr(o.n)+'</td><td class="'+(x.tb<0?'neg':x.tg>=t?'ok':'')+'">'+pct(x.tg)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+kr(x.tb)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+kr(x.tb*s.vol)+'</td></tr>';
+  });
   $('ladder').innerHTML=rows;
 
   /* Valutakänslighet */
@@ -631,9 +630,8 @@ function pickDisc(el){
 }
 $('panel-pris').addEventListener('click',function(e){pickDisc(e.target.closest('[data-disc]'))});
 $('disc-table').addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();pickDisc(e.target.closest('tr'));var r=document.querySelector('#disc-table tr.now');if(r)r.focus()} });
-function pickRow(tr){ if(tr&&tr.classList.contains('pick')){ s.N=Math.round(parseFloat(tr.dataset.n)); fromN(); render(); } }
-$('ladder').addEventListener('click',function(e){pickRow(e.target.closest('tr'))});
-$('ladder').addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();pickRow(e.target.closest('tr'))} });
+$('ladder').addEventListener('click',function(e){pickDisc(e.target.closest('tr[data-disc]'))});
+$('ladder').addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();pickDisc(e.target.closest('tr[data-disc]'));var r=document.querySelector('#ladder tr.now');if(r)r.focus()} });
 
 document.querySelectorAll('[data-round]').forEach(function(b){
   b.addEventListener('click',function(){
