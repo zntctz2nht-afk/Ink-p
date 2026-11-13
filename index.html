@@ -514,6 +514,17 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
       <tbody id="saved"></tbody></table></div>
     <div class="empty" id="saved-empty">Inga sparade kalkyler än. Tryck på Spara kalkyl högst upp.</div>
   </section>
+  <section class="card wide">
+    <h2>Säkerhetskopia och flytt mellan enheter</h2>
+    <p class="lead">Allt i portalen lagras i den här webbläsaren. Ladda ned en säkerhetskopia här och läs in den på en annan enhet för att få med dig kalkyler, prisfil, EVM-lista, leverantörer, fakturor och originalfiler.</p>
+    <div class="chips" style="margin-top:0">
+      <button class="btn primary" type="button" id="bk-export">Ladda ned säkerhetskopia</button>
+      <input type="file" class="vh" id="bk-file" accept=".json,application/json">
+      <label class="btn" for="bk-file">Läs in säkerhetskopia</label>
+      <span id="bk-status" aria-live="polite"></span>
+    </div>
+    <p class="note">Att läsa in en säkerhetskopia ersätter allt som finns på den här enheten. Ändringar förs inte över automatiskt: det är den senast inlästa kopian som gäller.</p>
+  </section>
 </div>
 </main>
 
@@ -532,7 +543,8 @@ try{
   var raw=JSON.parse(localStorage.getItem(KEY)||'null');
   if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; if(Array.isArray(raw.evm))evm=raw.evm; if(raw.fxm)fxm=raw.fxm; }
 }catch(e){}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick,evm:evm,fxm:fxm}))}catch(e){}}
+var importing=false;
+function persist(){if(importing)return;try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick,evm:evm,fxm:fxm}))}catch(e){}}
 
 var $=function(id){return document.getElementById(id)};
 function num(v){var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.'));return isFinite(n)?n:0}
@@ -988,6 +1000,7 @@ function pfBuildX(onlyChanged){
 function pfSave(){
   clearTimeout(pfTimer);
   pfTimer=setTimeout(function(){
+    if(importing) return;
     try{
       if(!pf) localStorage.removeItem(PFKEY);
       else localStorage.setItem(PFKEY,JSON.stringify({name:pf.name,enc:pf.enc,bom:pf.bom,text:pf.text,delim:pf.delim,header:pf.header,map:pf.map,kind:pf.kind,np:pf.np,link:pf.link,src:pf.src,sheet:pf.sheet,xt:pf.xt}));
@@ -1328,6 +1341,7 @@ function idbDo(mode,fn){
   }); });
 }
 function supSave(){
+  if(importing) return Promise.resolve();
   return idbDo('readwrite',function(st){return st.put(sups,'suppliers')}).then(function(){supDbFail=false},function(){supDbFail=true}).then(supStatus);
 }
 function supStatus(msg){
@@ -1755,6 +1769,50 @@ $('sup-list').addEventListener('click',function(e){
   }
 });
 idbDo('readonly',function(st){return st.get('suppliers')}).then(function(v){ if(Array.isArray(v)) sups=v.map(supNorm); },function(){ supDbFail=true; }).then(function(){ supRender(); supStatus(); });
+
+/* Säkerhetskopia: allt i webbläsarens lagring (inklusive originalfiler) i en JSON-fil som kan läsas in på en annan enhet. */
+function blobToDataUrl(blob){return new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(fr.result)};fr.onerror=rej;fr.readAsDataURL(blob)})}
+function dataUrlToBlob(u){
+  var i=u.indexOf(','), bin=atob(u.slice(i+1)), n=bin.length, arr=new Uint8Array(n);
+  while(n--) arr[n]=bin.charCodeAt(n);
+  return new Blob([arr],{type:u.slice(5,i).split(';')[0]||'application/octet-stream'});
+}
+$('bk-export').addEventListener('click',function(){
+  var btn=this; btn.disabled=true; txt('bk-status','Skapar säkerhetskopia …'); persist();
+  setTimeout(function(){ /* väntar ut fördröjd sparning av prisfilen */
+    var out={app:'me-portalen',v:1,at:new Date().toISOString(),ls:{},suppliers:sups,files:{}}, ids=[], chain=Promise.resolve(), miss=0;
+    [KEY,PFKEY].forEach(function(k){var v=localStorage.getItem(k); if(v!=null) out.ls[k]=v});
+    sups.forEach(function(sp){sp.files.concat(sp.invoices).forEach(function(f){ids.push(f.id)})});
+    ids.forEach(function(id){
+      chain=chain.then(function(){return idbDo('readonly',function(st){return st.get('file:'+id)})}).then(function(blob){
+        if(!blob){miss++;return} return blobToDataUrl(blob).then(function(u){out.files[id]=u});
+      },function(){miss++});
+    });
+    chain.then(function(){
+      var fn='me-portalen-'+new Date().toLocaleDateString('sv-SE')+'.json';
+      download(new Blob([JSON.stringify(out)],{type:'application/json'}),fn);
+      txt('bk-status',fn+' skapad.'+(miss?' '+miss+' originalfiler saknades och kom inte med.':''));
+    }).catch(function(){txt('bk-status','Det gick inte att skapa säkerhetskopian.')}).then(function(){btn.disabled=false});
+  },400);
+});
+$('bk-file').addEventListener('change',function(){
+  var f=this.files&&this.files[0], inp=this; if(!f) return;
+  f.text().then(function(text){
+    var d=JSON.parse(text);
+    if(!d||d.app!=='me-portalen'||!d.ls) throw new Error('fel fil');
+    if(!confirm('Läsa in säkerhetskopian från '+String(d.at||'').slice(0,10)+'? Allt som finns i portalen på den här enheten ersätts.')){ inp.value=''; return; }
+    importing=true; txt('bk-status','Läser in …');
+    [KEY,PFKEY].forEach(function(k){ if(d.ls[k]!=null) localStorage.setItem(k,d.ls[k]); else localStorage.removeItem(k); });
+    var chain=idbDo('readwrite',function(st){ st.clear(); return st.put(Array.isArray(d.suppliers)?d.suppliers:[],'suppliers'); });
+    Object.keys(d.files||{}).forEach(function(id){
+      chain=chain.then(function(){ var blob=dataUrlToBlob(d.files[id]); return idbDo('readwrite',function(st){return st.put(blob,'file:'+id)}); });
+    });
+    return chain.then(function(){ location.reload(); });
+  }).catch(function(e){
+    importing=false; inp.value='';
+    txt('bk-status',e&&e.message==='fel fil'?'Filen är inte en säkerhetskopia från ME Portalen.':'Det gick inte att läsa in säkerhetskopian.');
+  });
+});
 
 /* Snabbkalkyl: fristående räknare för inköpspris, försäljningspris och täckningsgrad. */
 function vatF(){return 1+(s.vat||0)/100}
