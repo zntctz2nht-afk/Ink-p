@@ -221,6 +221,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
   <section class="card wide">
     <h2>Prissättning</h2>
     <p class="lead">Ändra vilket fält du vill. Övriga räknas om. Alla priser är exklusive moms om inget annat står.</p>
+    <div class="banner" id="pris-link" style="margin:0 0 14px" hidden></div>
     <div class="grid">
       <label class="f">ÅF-pris netto
         <span class="inp"><input id="N" inputmode="decimal"><span class="u">kr</span></span></label>
@@ -526,7 +527,7 @@ function render(){
     var x=calc(it);
     return '<tr><td style="white-space:normal;min-width:140px">'+esc(it.name||'Namnlös')+'</td><td>'+kr(x.cost)+'</td><td>'+kr(it.N)+'</td><td>'+kr(x.rin)+'</td><td class="'+(x.tb<0?'neg':'')+'">'+pct(x.tg)+'</td><td>'+kr(x.tb)+'</td><td><button class="linkbtn" type="button" data-load="'+i+'">Öppna</button><button class="linkbtn" type="button" data-del="'+i+'" style="color:var(--crit)">Ta bort</button></td></tr>';
   }).join('');
-  pfBanner();
+  pfSync(); pfBanner();
   persist();
 }
 function esc(t){return String(t).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]})}
@@ -573,7 +574,7 @@ $('save').addEventListener('click',function(){
 });
 $('saved').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
-  if(b.dataset.load!==undefined){ s=JSON.parse(JSON.stringify(saved[+b.dataset.load])); fill(); render(); showTab('inkop'); }
+  if(b.dataset.load!==undefined){ s=JSON.parse(JSON.stringify(saved[+b.dataset.load])); if(pf&&pf.link!=null){pf.link=null;pfSave()} fill(); render(); showTab('inkop'); }
   else if(b.dataset.del!==undefined){ saved.splice(+b.dataset.del,1); render(); }
 });
 $('copy').addEventListener('click',function(){
@@ -911,15 +912,55 @@ function pfSummary(){
   txt('pf-count',n?String(n):'');
   txt('pf-exnote','');
 }
-function pfBanner(){
-  var el=$('pf-link');
-  if(!pf||pf.link==null||!pf.rows[pf.link]||pf.map.price<0){ el.hidden=true; return; }
-  var v=pf.kind==='N'?s.N:pf.kind==='R'?s.R:calc(s).rin;
-  var lab=pf.kind==='N'?'ÅF-pris netto':pf.kind==='R'?'rek. konsumentpris':'konsumentpris inkl. moms';
-  el.hidden=false;
-  el.innerHTML='<span>Kalkylen för <b>'+esc(pfCell(pf.link,'art')||pfCell(pf.link,'name'))+'</b> ger '+lab+' '+kr(v)+'.</span>'+
-    '<button class="btn small" type="button" data-pfuse="'+v+'">Använd som nytt pris</button><button class="linkbtn" type="button" data-pfunlink="1">Stäng</button>';
+/* Koppling mellan en artikel i prisfilen och kalkylen: pf.link är radens index. */
+function pfLinked(){return !!pf&&pf.link!=null&&!!pf.rows[pf.link]&&pf.map.price>-1}
+function pfKindVal(){return pf.kind==='N'?s.N:pf.kind==='R'?s.R:calc(s).rin}
+function pfKindLabel(){return pf.kind==='N'?'ÅF-pris netto':pf.kind==='R'?'rek. konsumentpris':'konsumentpris inkl. moms'}
+function pfToCalc(v){
+  /* lägger filens pris i kalkylen och behåller ÅF-rabatten, så att det andra priset följer med */
+  if(!(v>0)) return;
+  var ratio=s.R>0&&s.N>0?s.N/s.R:0;
+  if(pf.kind==='N'){ s.N=v; if(ratio) s.R=v/ratio; }
+  else{ var r=pf.kind==='R'?v:v/(1+s.vat/100); s.R=r; if(ratio) s.N=r*ratio; }
 }
+function pfLinkTo(i){
+  var v=pf.np[i]!==undefined?pf.np[i]:pfCur(i), cost=pnum(pfCell(i,'cost'));
+  s.name=(pfCell(i,'art')+' '+pfCell(i,'name')).trim();
+  if(pf.map.cost>-1&&cost>=0){ s.price=cost; s.cur='SEK'; s.qty=1; s.supDisc=0; s.freight=0; s.freightCur='SEK'; s.duty=0; s.other=0; s.overhead=0; }
+  pfToCalc(v);
+  pf.link=i; pfSave(); fill(); render(); showTab('pris');
+}
+function pfPush(){
+  /* prisfilen har ändrats: uppdatera kalkylen för den kopplade artikeln */
+  if(!pfLinked()) return;
+  var v=pf.np[pf.link]!==undefined?pf.np[pf.link]:pfCur(pf.link);
+  if(v>0){ pfToCalc(v); render(); }
+}
+function pfSync(){
+  /* kalkylen har ändrats: för över priset till den kopplade artikeln i prisfilen */
+  if(!pfLinked()) return;
+  var i=pf.link, v=Math.round(pfKindVal()*100)/100; if(!(v>0)) return;
+  var nv=Math.abs(v-pfCur(i))<0.005?undefined:v;
+  if(pf.np[i]===nv) return;
+  pfSet(i,nv); pfSave(); pfSummary();
+  var inp=document.querySelector('[data-pf="'+i+'"]');
+  if(inp){
+    if(document.activeElement!==inp) inp.value=nv!==undefined?plain(nv,2):'';
+    $('pfc-'+i).textContent=pfChangeHtml(i); if($('pft-'+i)) $('pft-'+i).textContent=pfTgHtml(i);
+  }
+}
+function pfBanner(){
+  var el=$('pf-link'), el2=$('pris-link');
+  if(!pfLinked()){ el.hidden=true; el2.hidden=true; return; }
+  var i=pf.link, cur=pfCur(i), v=pf.np[i]!==undefined?pf.np[i]:cur, who='<b>'+esc((pfCell(i,'art')+' '+pfCell(i,'name')).trim())+'</b>';
+  var unlink='<button class="linkbtn" type="button" data-pfunlink="1">Koppla loss</button>';
+  el.hidden=false; el2.hidden=false;
+  el.innerHTML='<span>'+who+' är kopplad till kalkylen. Det du ändrar på fliken Prissättning förs över hit automatiskt.</span>'+
+    '<button class="btn small" type="button" data-pfgo="pris">Öppna kalkylen</button>'+unlink;
+  el2.innerHTML='<span>Du arbetar med '+who+' från prisfilen. Nuvarande pris '+kr2(cur)+', nytt pris '+kr2(v)+(pfChangeHtml(i)?' ('+pfChangeHtml(i)+')':'')+'. Kalkylens '+pfKindLabel()+' sparas automatiskt som nytt pris i prisfilen.</span>'+
+    '<button class="btn small" type="button" data-pfgo="prisfil">Tillbaka till prisfilen</button>'+unlink;
+}
+function kr2(n){return isFinite(n)?fmt(n,Math.abs(n-Math.round(n))<0.005?0:2)+' kr':'saknas'}
 function pfRender(){
   var on=!!pf;
   $('pf-setup').hidden=!on; $('pf-work').hidden=!on; $('pf-clear').hidden=!on;
@@ -953,7 +994,7 @@ function pfRender(){
   var list=pfFiltered(), rows='';
   list.slice(0,pfLimit).forEach(function(i){
     var cur=pfCur(i), v=pf.np[i];
-    rows+='<tr><td>'+esc(pfCell(i,'art'))+'</td><td class="txt">'+esc(pfCell(i,'name'))+'</td><td style="text-align:left">'+esc(pfCell(i,'group'))+'</td>'+
+    rows+='<tr'+(i===pf.link?' class="now"':'')+'><td>'+esc(pfCell(i,'art'))+'</td><td class="txt">'+esc(pfCell(i,'name'))+'</td><td style="text-align:left">'+esc(pfCell(i,'group'))+'</td>'+
       (hasCost?'<td>'+fmt(pnum(pfCell(i,'cost')),2)+'</td>':'')+
       '<td>'+fmt(cur,2)+'</td>'+
       '<td><input data-pf="'+i+'" inputmode="decimal" aria-label="Nytt pris '+esc(pfCell(i,'art'))+'" placeholder="'+(isNaN(cur)?'':plain(cur,2))+'" value="'+(v!==undefined?plain(v,2):'')+'"></td>'+
@@ -1028,8 +1069,8 @@ $('panel-prisfil').addEventListener('change',function(e){
   }
   else if(el.id==='pf-delim'){ pf.delim=el.value; pfReparse(); pfGuess(); pf.np={}; pf.link=null; }
   else if(el.id==='pf-header') pf.header=el.checked;
-  else if(el.id==='pf-kind') pf.kind=el.value;
-  else if(el.dataset.pfmap){ pf.map[el.dataset.pfmap]=+el.value; if(el.dataset.pfmap==='price') pf.np={}; }
+  else if(el.id==='pf-kind'){ pf.kind=el.value; pfPush(); }
+  else if(el.dataset.pfmap){ pf.map[el.dataset.pfmap]=+el.value; if(el.dataset.pfmap==='price'){ pf.np={}; pf.link=null; } }
   else return;
   pfRender(); pfSave();
 });
@@ -1040,6 +1081,7 @@ $('panel-prisfil').addEventListener('input',function(e){
     var i=+el.dataset.pf; pfSet(i,el.value.trim()===''?undefined:num(el.value));
     $('pfc-'+i).textContent=pfChangeHtml(i); if($('pft-'+i)) $('pft-'+i).textContent=pfTgHtml(i);
     pfSummary(); pfSave();
+    if(i===pf.link) pfPush();
   }
 });
 $('panel-prisfil').addEventListener('click',function(e){
@@ -1062,11 +1104,8 @@ $('panel-prisfil').addEventListener('click',function(e){
     return;
   }else if(b.id==='pf-more'){ pfLimit+=200;
   }else if(b.dataset.pfcalc!==undefined){
-    i=+b.dataset.pfcalc; v=pf.np[i]!==undefined?pf.np[i]:pfCur(i);
-    s.name=(pfCell(i,'art')+' '+pfCell(i,'name')).trim();
-    if(v>0){ if(pf.kind==='N') s.N=v; else if(pf.kind==='R') s.R=v; else s.R=v/(1+s.vat/100); }
-    pf.link=i; pfSave(); fill(); render(); showTab('pris'); return;
-  }else if(b.dataset.pfuse!==undefined){ pfSet(pf.link,roundTo(+b.dataset.pfuse,0)); pf.link=null;
+    pfLinkTo(+b.dataset.pfcalc); return;
+  }else if(b.dataset.pfgo){ showTab(b.dataset.pfgo); return;
   }else if(b.dataset.pfunlink){ pf.link=null;
   }else if(b.id==='pf-export'){
     if(pf.map.price<0){ txt('pf-exnote','Välj först vilken kolumn som är priset.'); return; }
@@ -1078,7 +1117,12 @@ $('panel-prisfil').addEventListener('click',function(e){
     a.download=fn; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
     pfSummary(); txt('pf-exnote',fn+' skapad med '+fmt(res.changed)+' ändrade priser.'); return;
   }else return;
-  pfRender(); pfSave();
+  pfPush(); pfRender(); pfSave();
+});
+$('pris-link').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b||!pf) return;
+  if(b.dataset.pfgo) showTab(b.dataset.pfgo);
+  else if(b.dataset.pfunlink){ pf.link=null; pfSave(); pfRender(); }
 });
 try{
   var pr=JSON.parse(localStorage.getItem(PFKEY)||'null');
@@ -1091,6 +1135,7 @@ var TABS=[].slice.call(document.querySelectorAll('#tabs .tab'));
 function showTab(name,focus){
   if(!TABS.some(function(b){return b.dataset.tab===name})) name='inkop';
   tab=name;
+  if(name==='prisfil') pfRender();
   TABS.forEach(function(b){
     var on=b.dataset.tab===name;
     b.setAttribute('aria-selected',on?'true':'false'); b.tabIndex=on?0:-1;
