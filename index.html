@@ -208,6 +208,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <button class="tab" type="button" role="tab" id="tab-stege" data-tab="stege" aria-controls="panel-stege">Prisstege</button>
     <button class="tab" type="button" role="tab" id="tab-valuta" data-tab="valuta" aria-controls="panel-valuta">Valuta</button>
     <button class="tab" type="button" role="tab" id="tab-prisfil" data-tab="prisfil" aria-controls="panel-prisfil">Prisfil<span class="count" id="pf-count"></span></button>
+    <button class="tab" type="button" role="tab" id="tab-art" data-tab="art" aria-controls="panel-art">Artiklar<span class="count" id="art-count"></span></button>
     <button class="tab" type="button" role="tab" id="tab-evm" data-tab="evm" aria-controls="panel-evm">EVM<span class="count" id="evm-count"></span></button>
     <button class="tab" type="button" role="tab" id="tab-lev" data-tab="lev" aria-controls="panel-lev">Leverantörer<span class="count" id="sup-count"></span></button>
     <button class="tab" type="button" role="tab" id="tab-sparade" data-tab="sparade" aria-controls="panel-sparade">Sparade<span class="count" id="saved-count"></span></button>
@@ -464,6 +465,23 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
   </section>
 </div>
 
+<div class="wrap panel" role="tabpanel" id="panel-art" aria-labelledby="tab-art" hidden>
+  <section class="card wide">
+    <h2>Artiklar</h2>
+    <p class="lead">Alla dina artiklar på ett ställe: priset från prisfilen, EVM-listan, senaste inköpspris från fakturor och leverantörernas prislistor. Artiklar där inköpspriset har stigit eller marginalen ligger under målet markeras.</p>
+    <div class="grid auto">
+      <label class="f">Sök artikel
+        <span class="inp"><input type="search" id="art-q" placeholder="Nummer, benämning eller grupp"></span></label>
+      <label class="f">Visa
+        <span class="inp sel"><select id="art-f"><option value="all">Alla artiklar</option><option value="act">Behöver åtgärd</option><option value="buy">Med inköpshistorik</option><option value="evm">Från EVM</option></select></span></label>
+      <label class="f">Bevaka marginalen vid rabattsats
+        <span class="inp sel"><select id="art-disc"></select></span></label>
+    </div>
+    <p class="note" id="art-sum" aria-live="polite"></p>
+    <div id="art-body"></div>
+  </section>
+</div>
+
 <div class="wrap panel" role="tabpanel" id="panel-evm" aria-labelledby="tab-evm" hidden>
   <section class="card wide">
     <h2>EVM – eget varumärke</h2>
@@ -539,13 +557,13 @@ var DEF={name:'Avhärdare 20 L med WiFi-ventil (exempel)',price:285,cur:'EUR',qt
   duty:0,other:35,overhead:5,fxBuf:2,N:5490,R:7996,campaign:0,vat:25,targetTG:35,step:'5',vol:120,
   cvAmt:1000,cvFrom:'EUR',cvTo:'SEK',
   rates:{EUR:11.051,USD:9.9317,CNY:1.4889,GBP:13.1558,NOK:1.0354,DKK:1.4814}};
-var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop', quick={cost:3150,price:5490}, evm=[], fxm={auto:true,date:'',at:0};
+var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop', quick={cost:3150,price:5490}, evm=[], fxm={auto:true,date:'',at:0}, watch={disc:35};
 try{
   var raw=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; if(Array.isArray(raw.evm))evm=raw.evm; if(raw.fxm)fxm=raw.fxm; }
+  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; if(Array.isArray(raw.evm))evm=raw.evm; if(raw.fxm)fxm=raw.fxm; if(raw.watch)watch=raw.watch; }
 }catch(e){}
 var importing=false;
-function persist(){if(importing)return;try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick,evm:evm,fxm:fxm}))}catch(e){}}
+function persist(){if(importing)return;try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick,evm:evm,fxm:fxm,watch:watch}))}catch(e){}}
 
 var $=function(id){return document.getElementById(id)};
 function num(v){var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.'));return isFinite(n)?n:0}
@@ -1807,7 +1825,7 @@ function supRender(){
       '<div id="sup-tbl-'+sp.id+'"></div></section>';
   }).join('');
   sups.forEach(function(sp){supTable(sp.id);invTable(sp.id)});
-  regRender();
+  regRender(); artBadge();
 }
 function supAdd(){
   var inp=$('sup-new'), name=inp.value.trim();
@@ -1905,6 +1923,135 @@ $('sup-list').addEventListener('click',function(e){
   }
 });
 idbDo('readonly',function(st){return st.get('suppliers')}).then(function(v){ if(Array.isArray(v)) sups=v.map(supNorm); },function(){ supDbFail=true; }).then(function(){ supRender(); supStatus(); });
+
+/* Artiklar: ett kort per artikel som samlar prisfilen (Visma), EVM, fakturor och prislistor, med bevakning av marginalen. */
+var artUi={q:'',f:'all',open:null,limit:100};
+function artKey(nr,name){ nr=String(nr||'').trim().toLowerCase(); return nr||('n:'+String(name||'').trim().toLowerCase()); }
+function artData(){
+  var map={}, list=[], i, a;
+  var get=function(nr,name){
+    var k=artKey(nr,name); if(k==='n:') return null;
+    var x=map[k]; if(!x){ x=map[k]={k:k,nr:String(nr||'').trim(),name:String(name||'').trim(),src:{},buys:[],offers:[],ord:NaN,net:NaN,vcost:NaN,ecost:NaN,row:null,evm:null,group:''}; list.push(x); }
+    else if(!x.name&&name) x.name=String(name).trim();
+    return x;
+  };
+  if(pf&&pf.map&&pf.map.art>-1&&pf.map.price>-1) for(i=pfStart();i<pf.rows.length;i++){
+    a=get(pfCell(i,'art'),pfCell(i,'name')); if(!a) continue;
+    var v=pf.np[i]!==undefined?pf.np[i]:pfCur(i);
+    a.src.visma=1; a.row=i; a.group=pfCell(i,'group'); a.changed=pfChanged(i);
+    if(pf.kind==='N') a.net=v; else a.ord=pf.kind==='R'?v:v/vatF();
+    if(pf.map.cost>-1) a.vcost=pnum(pfCell(i,'cost'));
+  }
+  evm.forEach(function(it,idx){
+    a=get(it.nr,it.name); if(!a) return;
+    a.src.evm=1; a.evm=idx;
+    if(isNaN(a.ord)&&isNaN(a.net)&&typeof it.price==='number') a.ord=it.price;
+    if(typeof it.cost==='number') a.ecost=it.cost;
+  });
+  sups.forEach(function(sp){
+    sp.invoices.forEach(function(inv){ invLines(sp,inv).forEach(function(l){
+      var lk=sp.links[l.key]; if(!lk) return; a=get(lk.nr,lk.name); if(!a) return;
+      a.src.buy=1; a.buys.push({d:inv.date||'',inv:inv.number||inv.name,sup:sp.name,art:l.art,name:l.name,qty:l.qty,price:l.price,landed:l.landed,cur:inv.cur,kr:l.landed*rateOf(inv.cur)});
+    }); });
+    var latest={}, k, o;
+    sp.files.forEach(function(f){ if(!f.map) return; plLines(f).forEach(function(l){
+      var lk=sp.links[l.key]; if(!lk) return; o=latest[l.key];
+      if(!o||(f.date||'')>=o.d) latest[l.key]={d:f.date||'',price:l.price,cur:f.cur,art:l.art,file:f.name,lk:lk};
+    }); });
+    for(k in latest){ o=latest[k]; a=get(o.lk.nr,o.lk.name); if(a){ a.src.pl=1; a.offers.push({sup:sp.name,d:o.d,price:o.price,cur:o.cur,kr:o.price*rateOf(o.cur),art:o.art,file:o.file}); } }
+  });
+  var d=watch.disc/100, tgt=s.targetTG/100;
+  list.forEach(function(a){
+    a.buys.sort(function(x,y){return x.d<y.d?-1:x.d>y.d?1:0});
+    a.last=a.buys.length?a.buys[a.buys.length-1]:null;
+    if(a.last&&isFinite(a.last.kr)){ a.cost=a.last.kr; a.costSrc='faktura '+(a.last.d||a.last.inv); }
+    else if(isFinite(a.vcost)){ a.cost=a.vcost; a.costSrc='Visma'; }
+    else if(isFinite(a.ecost)){ a.cost=a.ecost; a.costSrc='EVM'; }
+    else{ a.cost=NaN; a.costSrc=''; }
+    a.netW=isFinite(a.ord)?a.ord*(1-d):a.net;
+    a.tg=a.netW>0&&isFinite(a.cost)?(a.netW-a.cost)/a.netW:NaN;
+    a.flags=[];
+    if(a.last&&isFinite(a.last.kr)&&a.vcost>0&&a.last.kr>a.vcost*1.02) a.flags.push({t:'Inköpspris +'+fmt((a.last.kr/a.vcost-1)*100,0)+' %',c:'warn',up:1});
+    if(isFinite(a.tg)&&a.tg<tgt) a.flags.push({t:a.tg<0?'Förlust':'Under mål',c:a.tg<0?'crit':'warn',low:1});
+  });
+  list.sort(function(x,y){return (y.flags.length?1:0)-(x.flags.length?1:0)||(x.nr||x.name).localeCompare(y.nr||y.name,'sv',{numeric:true,sensitivity:'base'})});
+  return list;
+}
+function artBadge(){ var n=artData().filter(function(a){return a.flags.length}).length; txt('art-count',n?String(n):''); return n; }
+function artCard(a){
+  var d=watch.disc/100, tgt=s.targetTG/100, h='', hasCost=isFinite(a.cost);
+  h+='<div class="stats" style="margin-top:0"><div><div class="k">Kostnad per styck'+(a.costSrc?' ('+esc(a.costSrc)+')':'')+'</div><div class="v">'+(hasCost?kr2(a.cost):'saknas')+'</div></div>'+
+     '<div><div class="k">'+(isFinite(a.ord)?'Ordinarie pris exkl. moms':'ÅF-pris netto')+'</div><div class="v">'+(isFinite(a.ord)?kr2(a.ord):isFinite(a.net)?kr2(a.net):'saknas')+'</div>'+(isFinite(a.ord)?'<div class="k">'+kr2(a.ord*vatF())+' inkl. moms</div>':'')+'</div>'+
+     '<div><div class="k">TG'+(isFinite(a.ord)?' vid '+watch.disc+' % rabatt':'')+'</div><div class="v'+(a.tg<0?' neg':'')+'">'+(isFinite(a.tg)?pct(a.tg):'–')+'</div><div class="k">Målet är '+fmt(s.targetTG,0)+' %</div></div></div>';
+  var up=a.flags.filter(function(f){return f.up})[0];
+  if(up) h+='<div class="banner"><span>Senaste hemtagna inköpspris är <b>'+kr2(a.last.kr)+'</b> ('+esc(a.last.sup)+', '+esc(a.last.d||a.last.inv)+'). Det är '+fmt((a.last.kr/a.vcost-1)*100,1)+' % högre än inköpspriset '+kr2(a.vcost)+' i prisfilen från Visma.</span></div>';
+  if(hasCost&&(isFinite(a.ord)||isFinite(a.net))){
+    var need=isFinite(a.ord)?a.cost/(1-tgt)/(1-d):a.cost/(1-tgt), have=isFinite(a.ord)?a.ord:a.net, sug=Math.ceil(need-0.005);
+    h+='<div class="banner"><span>'+(have>=need-0.005?'Målet nås med nuvarande pris. Lägsta '+(isFinite(a.ord)?'ordinarie pris':'ÅF-pris')+' för '+fmt(s.targetTG,0)+' % TG'+(isFinite(a.ord)?' vid '+watch.disc+' % rabatt':'')+' är '+kr2(need)+'.'
+        :'För att nå '+fmt(s.targetTG,0)+' % TG'+(isFinite(a.ord)?' vid '+watch.disc+' % rabatt':'')+' behöver '+(isFinite(a.ord)?'ordinarie pris':'ÅF-priset')+' vara minst <b>'+kr2(need)+'</b> (nu '+kr2(have)+').')+'</span>'+
+      (a.row!=null&&have<need-0.005?'<button class="btn small" type="button" data-artset="'+esc(a.k)+'" data-val="'+sug+'">Sätt '+kr(sug)+' som nytt pris i prisfilen</button>':'')+
+      '<button class="btn small" type="button" data-artcalc="'+esc(a.k)+'">Öppna i kalkylen</button></span></div>';
+  }
+  if(a.changed) h+='<p class="note">Artikeln har ett nytt, ännu inte exporterat pris i prisfilen. Siffrorna ovan räknas på det nya priset.</p>';
+  if(isFinite(a.ord)&&hasCost){
+    h+='<h3 style="font-size:15px;margin-top:16px">Marginal per rabattsats</h3><table><thead><tr><th>Rabattsats</th><th>ÅF-pris netto</th><th>TB</th><th>TG</th></tr></thead><tbody>'+
+      [0].concat(RATES).map(function(r){ var n=a.ord*(1-r/100), b=n-a.cost, g=b/n;
+        return '<tr'+(r===watch.disc?' class="now"':'')+'><td>'+(r?r+' %':'Ingen rabatt')+'</td><td>'+kr(n)+'</td><td class="'+(b<0?'neg':'')+'">'+kr(b)+'</td><td class="'+(b<0?'neg':g>=tgt?'ok':'')+'">'+pct(g)+'</td></tr>'; }).join('')+'</tbody></table>';
+  }
+  var srcRows=[], seen={};
+  a.buys.slice().reverse().forEach(function(b){ if(seen[b.sup]) return; seen[b.sup]=1; srcRows.push('<tr><td>'+esc(b.sup)+'</td><td style="text-align:left">Faktura '+esc(b.inv)+(b.d?', '+esc(b.d):'')+'</td><td style="text-align:left">'+esc(b.art)+'</td><td>'+fmt(b.price,2)+' '+b.cur+'</td><td>'+(isFinite(b.kr)?fmt(b.kr,2):'–')+'</td></tr>'); });
+  a.offers.forEach(function(o){ srcRows.push('<tr><td>'+esc(o.sup)+'</td><td style="text-align:left">Prislista '+esc(o.file)+(o.d?', gäller från '+esc(o.d):'')+'</td><td style="text-align:left">'+esc(o.art)+'</td><td>'+fmt(o.price,2)+' '+o.cur+'</td><td>'+(isFinite(o.kr)?fmt(o.kr,2):'–')+'</td></tr>'); });
+  if(srcRows.length) h+='<h3 style="font-size:15px;margin-top:16px">Leverantörer och priser</h3><table><thead><tr><th>Leverantör</th><th style="text-align:left">Källa</th><th style="text-align:left">Lev. art.nr</th><th>Pris</th><th>≈ kr</th></tr></thead><tbody>'+srcRows.join('')+'</tbody></table><p class="note">Fakturapriser i kronor är hemtaget pris med frakt och tull. Prislistepriser är utan frakt.</p>';
+  if(a.buys.length>1) h+='<h3 style="font-size:15px;margin-top:16px">Inköpshistorik</h3><table><thead><tr><th>Datum</th><th style="text-align:left">Faktura</th><th style="text-align:left">Leverantör</th><th>Antal</th><th>À-pris</th><th>Hemtaget ≈ kr</th></tr></thead><tbody>'+
+    a.buys.slice().reverse().map(function(b){return '<tr><td>'+esc(b.d||'–')+'</td><td style="text-align:left">'+esc(b.inv)+'</td><td style="text-align:left">'+esc(b.sup)+'</td><td>'+(isNaN(b.qty)?'':fmt(b.qty,0))+'</td><td>'+fmt(b.price,2)+' '+b.cur+'</td><td>'+(isFinite(b.kr)?fmt(b.kr,2):'–')+'</td></tr>'}).join('')+'</tbody></table>';
+  if(!srcRows.length) h+='<p class="note">Inga fakturor eller prislistor är kopplade till artikeln än. Koppla leverantörens rader till artikeln på fliken Leverantörer för att få inköpspris och historik här.</p>';
+  var where=[]; if(a.src.visma) where.push('prisfilen (Visma)'); if(a.src.evm) where.push('EVM-listan');
+  if(where.length) h+='<p class="note">Artikeln finns i '+where.join(' och ')+'.</p>';
+  return h;
+}
+function artRender(){
+  var all=artData(), q=artUi.q.trim().toLowerCase(), nAct=0;
+  all.forEach(function(a){ if(a.flags.length) nAct++; });
+  txt('art-count',nAct?String(nAct):'');
+  $('art-disc').innerHTML=[0].concat(RATES).map(function(r){return '<option value="'+r+'"'+(r===watch.disc?' selected':'')+'>'+(r?r+' %':'Ingen rabatt')+'</option>'}).join('');
+  if(!all.length){ txt('art-sum',''); $('art-body').innerHTML='<div class="empty">Här finns inga artiklar än. Läs in en prisfil på fliken Prisfil eller lägg upp artiklar på fliken EVM.</div>'; return; }
+  var list=all.filter(function(a){
+    return (artUi.f==='all'||(artUi.f==='act'&&a.flags.length)||(artUi.f==='buy'&&a.buys.length)||(artUi.f==='evm'&&a.src.evm))&&(!q||(a.nr+' '+a.name+' '+a.group).toLowerCase().indexOf(q)>-1);
+  });
+  txt('art-sum',fmt(all.length)+' artiklar, varav '+fmt(nAct)+' behöver åtgärd. Marginalen bevakas mot målet '+fmt(s.targetTG,0)+' % TG, som ändras på fliken Prissättning.');
+  var h='<div class="scroll"><table><thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th style="text-align:left">Artikelgrupp</th><th>Kostnad</th><th>'+(pf&&pf.kind==='N'?'ÅF-pris netto':'Ordinarie pris')+'</th><th>TG'+(watch.disc?' vid '+watch.disc+' %':'')+'</th><th style="text-align:left">Status</th><th></th></tr></thead><tbody>';
+  list.slice(0,artUi.limit).forEach(function(a){
+    var open=artUi.open===a.k, pr=isFinite(a.ord)?a.ord:a.net;
+    h+='<tr'+(open?' class="now"':'')+'><td>'+esc(a.nr)+'</td><td class="txt">'+esc(a.name)+'</td><td style="text-align:left">'+esc(a.group)+'</td>'+
+      '<td>'+(isFinite(a.cost)?fmt(a.cost,2):'–')+'</td><td>'+(isFinite(pr)?fmt(pr,2):'–')+'</td><td class="'+(a.tg<0?'neg':a.tg>=s.targetTG/100?'ok':'')+'">'+(isFinite(a.tg)?pct(a.tg):'–')+'</td>'+
+      '<td style="text-align:left;white-space:normal">'+(a.flags.map(function(f){return '<span class="pill '+f.c+'" style="margin:0 4px 0 0">'+f.t+'</span>'}).join('')||(a.src.evm&&!a.src.visma?'<span style="color:var(--muted)">EVM</span>':''))+'</td>'+
+      '<td><button class="linkbtn" type="button" data-artopen="'+esc(a.k)+'" aria-expanded="'+open+'">'+(open?'Stäng':'Visa')+'</button></td></tr>';
+    if(open) h+='<tr class="hist"><td colspan="8" style="text-align:left;white-space:normal">'+artCard(a)+'</td></tr>';
+  });
+  $('art-body').innerHTML=h+'</tbody></table></div><div class="chips"><span>Visar '+fmt(Math.min(artUi.limit,list.length))+' av '+fmt(list.length)+' artiklar.</span>'+(list.length>artUi.limit?'<button class="btn small" type="button" id="art-more">Visa fler</button>':'')+'</div>';
+}
+$('art-q').addEventListener('input',function(){ artUi.q=this.value; artUi.limit=100; artRender(); });
+$('art-f').addEventListener('change',function(){ artUi.f=this.value; artUi.limit=100; artRender(); });
+$('art-disc').addEventListener('change',function(){ watch.disc=+this.value; persist(); artRender(); $('art-disc').focus(); });
+$('art-body').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  var k=b.dataset.artopen||b.dataset.artset||b.dataset.artcalc, a=null;
+  if(b.id==='art-more'){ artUi.limit+=200; artRender(); return; }
+  if(k===undefined) return;
+  artData().forEach(function(x){ if(x.k===k) a=x; }); if(!a) return;
+  if(b.dataset.artopen!==undefined){ artUi.open=artUi.open===k?null:k; artRender(); }
+  else if(b.dataset.artset!==undefined&&a.row!=null){
+    var v=+b.dataset.val; pfSet(a.row,pf.kind==='Rin'?Math.round(v*vatF()*100)/100:v); pfSave(); pfSummary();
+    if(pf.link===a.row) pfPush();
+    artRender();
+  }
+  else if(b.dataset.artcalc!==undefined){
+    if(a.row!=null){ pfLinkTo(a.row); }
+    else{ if(pf&&pf.link!=null){ pf.link=null; pfSave(); } s.name=(a.nr+' '+a.name).trim(); if(isFinite(a.ord)){ var ratio=s.R>0&&s.N>0?s.N/s.R:1; s.R=a.ord; s.N=locked()?s.R*(1-s.disc/100):s.R*ratio; } showTab('pris'); }
+    if(isFinite(a.cost)) s.kalk=Math.round(a.cost*100)/100;
+    fill(); render();
+  }
+});
 
 /* Säkerhetskopia: allt i webbläsarens lagring (inklusive originalfiler) i en JSON-fil som kan läsas in på en annan enhet. */
 function blobToDataUrl(blob){return new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(fr.result)};fr.onerror=rej;fr.readAsDataURL(blob)})}
@@ -2056,6 +2203,7 @@ function showTab(name,focus){
   if(name==='snabb') qRender();
   if(name==='evm') evmRender();
   if(name==='lev') supRender();
+  if(name==='art') artRender();
   TABS.forEach(function(b){
     var on=b.dataset.tab===name;
     b.setAttribute('aria-selected',on?'true':'false'); b.tabIndex=on?0:-1;
