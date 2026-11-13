@@ -202,15 +202,16 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 <div class="wrap narrow panel" role="tabpanel" id="panel-snabb" aria-labelledby="tab-snabb" hidden>
   <section class="card wide">
     <h2>Snabbkalkyl</h2>
-    <p class="lead">Skriv inköpspris och försäljningspris, så visas täckningsgraden. Skriver du en täckningsgrad räknas försäljningspriset fram. Priserna är exklusive moms.</p>
+    <p class="lead">Fyll i två av fälten, så räknas det tredje fram. Det är alltid de två fält du senast skrev i som gäller, och det framräknade fältet har streckad ram. Priserna är exklusive moms.</p>
     <div class="grid auto">
       <label class="f">Inköpspris
         <span class="inp"><input id="q-cost" inputmode="decimal"><span class="u">kr</span></span></label>
       <label class="f">Försäljningspris
         <span class="inp"><input id="q-price" inputmode="decimal"><span class="u">kr</span></span></label>
-      <label class="f">Täckningsgrad
+      <label class="f">Marginal (täckningsgrad)
         <span class="inp"><input id="q-tg" inputmode="decimal"><span class="u">%</span></span></label>
     </div>
+    <p class="note" id="q-note" aria-live="polite"></p>
     <div class="stats" aria-live="polite">
       <div><div class="k">Täckningsgrad</div><div class="v" id="q-otg"></div></div>
       <div><div class="k">Täckningsbidrag</div><div class="v" id="q-otb"></div></div>
@@ -1237,8 +1238,16 @@ pfRender();
 
 /* Snabbkalkyl: fristående räknare för inköpspris, försäljningspris och täckningsgrad. */
 function qRender(){
+  /* det fält som inte är bland de två senast ändrade räknas fram ur de andra två */
+  if(!Array.isArray(quick.last)||quick.last.length!==2) quick.last=['cost','price'];
+  var target=['cost','price','tg'].filter(function(k){return quick.last.indexOf(k)<0})[0], tf=Math.min(num(quick.tg),99.99)/100;
+  if(target==='tg') quick.tg=quick.price>0?(quick.price-quick.cost)/quick.price*100:NaN;
+  else if(target==='price') quick.price=quick.cost/(1-tf);
+  else quick.cost=quick.price*(1-tf);
   var c=quick.cost, pr=quick.price, tb=pr-c, tg=pr>0?tb/pr:NaN;
-  setIn('q-cost',plain(c,2)); setIn('q-price',plain(pr,2)); setIn('q-tg',plain(tg*100,1));
+  setIn('q-cost',plain(c,2)); setIn('q-price',plain(pr,2)); setIn('q-tg',plain(quick.tg,1));
+  ['cost','price','tg'].forEach(function(k){ $('q-'+k).parentNode.classList.toggle('calc',k===target); });
+  txt('q-note',target==='tg'?'Marginalen räknas fram ur inköpspris och försäljningspris.':target==='price'?'Försäljningspriset räknas fram ur inköpspris och marginal.':'Inköpspriset räknas fram: så mycket får varan högst kosta för att nå marginalen vid det försäljningspriset.');
   var neg=tb<0?' neg':'';
   $('q-otg').className='v'+neg; $('q-otb').className='v'+neg; $('q-omk').className='v'+neg;
   txt('q-otg',pct(tg)); txt('q-otb',isFinite(tb)?fmt(tb,Math.abs(tb-Math.round(tb))<0.005?0:2)+' kr':'–'); txt('q-omk',c>0?pct(tb/c):'–');
@@ -1248,11 +1257,10 @@ function qRender(){
   }).join('');
 }
 $('panel-snabb').addEventListener('input',function(e){
-  var el=e.target, v=num(el.value);
-  if(el.id==='q-cost') quick.cost=v;
-  else if(el.id==='q-price') quick.price=v;
-  else if(el.id==='q-tg'){ if(v<100) quick.price=quick.cost/(1-v/100); }
-  else return;
+  var el=e.target, k=el.id==='q-cost'?'cost':el.id==='q-price'?'price':el.id==='q-tg'?'tg':'';
+  if(!k) return;
+  quick[k]=num(el.value);
+  if(quick.last[0]!==k) quick.last=[k,quick.last[0]];
   qRender(); persist();
 });
 $('panel-snabb').addEventListener('focusout',function(){ setTimeout(qRender,0); });
