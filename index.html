@@ -95,6 +95,12 @@ button,input,select{font:inherit;color:inherit}
 [hidden]{display:none!important}
 td.txt{text-align:left;white-space:normal;min-width:160px}
 td.chg{font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.stats div{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
+.stats .k{font-size:13px;color:var(--muted)}
+.stats .v{font-family:var(--display);font-weight:700;font-size:26px;white-space:nowrap}
+.stats .v.neg{color:var(--crit)}
+@media (max-width:520px){.stats{grid-template-columns:1fr}}
 th .sort{background:none;border:0;padding:4px 2px;margin:-4px -2px;font:inherit;color:inherit;cursor:pointer;white-space:nowrap}
 th .sort:hover,th .sort.on{color:var(--accent)}
 th select{font:inherit;font-weight:600;color:inherit;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:4px 6px;max-width:220px;cursor:pointer}
@@ -172,6 +178,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 </div>
 <nav class="tabs" aria-label="Avsnitt">
   <div class="tabs-in" role="tablist" id="tabs">
+    <button class="tab" type="button" role="tab" id="tab-snabb" data-tab="snabb" aria-controls="panel-snabb">Snabbkalkyl</button>
     <button class="tab" type="button" role="tab" id="tab-inkop" data-tab="inkop" aria-controls="panel-inkop">Inköp</button>
     <button class="tab" type="button" role="tab" id="tab-pris" data-tab="pris" aria-controls="panel-pris">Prissättning</button>
     <button class="tab" type="button" role="tab" id="tab-stege" data-tab="stege" aria-controls="panel-stege">Prisstege</button>
@@ -183,6 +190,31 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 </div>
 
 <main>
+
+<div class="wrap narrow panel" role="tabpanel" id="panel-snabb" aria-labelledby="tab-snabb" hidden>
+  <section class="card wide">
+    <h2>Snabbkalkyl</h2>
+    <p class="lead">Skriv inköpspris och försäljningspris, så visas täckningsgraden. Skriver du en täckningsgrad räknas försäljningspriset fram. Priserna är exklusive moms.</p>
+    <div class="grid auto">
+      <label class="f">Inköpspris
+        <span class="inp"><input id="q-cost" inputmode="decimal"><span class="u">kr</span></span></label>
+      <label class="f">Försäljningspris
+        <span class="inp"><input id="q-price" inputmode="decimal"><span class="u">kr</span></span></label>
+      <label class="f">Täckningsgrad
+        <span class="inp"><input id="q-tg" inputmode="decimal"><span class="u">%</span></span></label>
+    </div>
+    <div class="stats" aria-live="polite">
+      <div><div class="k">Täckningsgrad</div><div class="v" id="q-otg"></div></div>
+      <div><div class="k">Täckningsbidrag</div><div class="v" id="q-otb"></div></div>
+      <div><div class="k">Påslag på inköpspris</div><div class="v" id="q-omk"></div></div>
+    </div>
+    <h3 style="font-size:16px;margin-top:20px">Med rabatt till återförsäljare</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Rabattsats</th><th>Pris efter rabatt</th><th>TB</th><th>TG</th></tr></thead>
+      <tbody id="q-rates"></tbody></table></div>
+    <p class="note">Snabbkalkylen är fristående och påverkar inte övriga flikar.</p>
+  </section>
+</div>
 
 <div class="wrap narrow panel" role="tabpanel" id="panel-inkop" aria-labelledby="tab-inkop">
   <section class="card wide">
@@ -422,12 +454,12 @@ var DEF={name:'Avhärdare 20 L med WiFi-ventil (exempel)',price:285,cur:'EUR',qt
   duty:0,other:35,overhead:5,fxBuf:2,N:5490,R:7996,campaign:0,vat:25,targetTG:35,step:'5',vol:120,
   cvAmt:1000,cvFrom:'EUR',cvTo:'SEK',
   rates:{EUR:11.051,USD:9.9317,CNY:1.4889,GBP:13.1558,NOK:1.0354,DKK:1.4814}};
-var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop';
+var s=JSON.parse(JSON.stringify(DEF)), saved=[], tab='inkop', quick={cost:3150,price:5490};
 try{
   var raw=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; }
+  if(raw){ if(raw.cur){for(var k in raw.cur)s[k]=raw.cur[k]; s.rates=Object.assign({},DEF.rates,raw.cur.rates||{});} saved=raw.saved||[]; if(raw.tab)tab=raw.tab; if(raw.quick)quick=raw.quick; }
 }catch(e){}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab}))}catch(e){}}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify({cur:s,saved:saved,tab:tab,quick:quick}))}catch(e){}}
 
 var $=function(id){return document.getElementById(id)};
 function num(v){var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.'));return isFinite(n)?n:0}
@@ -1168,6 +1200,29 @@ try{
   if(pr&&pr.text){ pf=pr; pfReparse(); }
 }catch(e){ pf=null }
 pfRender();
+
+/* Snabbkalkyl: fristående räknare för inköpspris, försäljningspris och täckningsgrad. */
+function qRender(){
+  var c=quick.cost, pr=quick.price, tb=pr-c, tg=pr>0?tb/pr:NaN;
+  setIn('q-cost',plain(c,2)); setIn('q-price',plain(pr,2)); setIn('q-tg',plain(tg*100,1));
+  var neg=tb<0?' neg':'';
+  $('q-otg').className='v'+neg; $('q-otb').className='v'+neg; $('q-omk').className='v'+neg;
+  txt('q-otg',pct(tg)); txt('q-otb',isFinite(tb)?fmt(tb,Math.abs(tb-Math.round(tb))<0.005?0:2)+' kr':'–'); txt('q-omk',c>0?pct(tb/c):'–');
+  $('q-rates').innerHTML=RATES.map(function(r){
+    var n=pr*(1-r/100), b=n-c;
+    return '<tr><td>'+r+' %</td><td>'+kr(n)+'</td><td class="'+(b<0?'neg':'')+'">'+kr(b)+'</td><td class="'+(b<0?'neg':'')+'">'+(n>0?pct(b/n):'–')+'</td></tr>';
+  }).join('');
+}
+$('panel-snabb').addEventListener('input',function(e){
+  var el=e.target, v=num(el.value);
+  if(el.id==='q-cost') quick.cost=v;
+  else if(el.id==='q-price') quick.price=v;
+  else if(el.id==='q-tg'){ if(v<100) quick.price=quick.cost/(1-v/100); }
+  else return;
+  qRender(); persist();
+});
+$('panel-snabb').addEventListener('focusout',function(){ setTimeout(qRender,0); });
+qRender();
 
 /* Flikar */
 var TABS=[].slice.call(document.querySelectorAll('#tabs .tab'));
