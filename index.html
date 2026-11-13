@@ -256,6 +256,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
       <li><span>Omkostnader</span><span id="b-oh"></span></li>
       <li class="tot"><span>Självkostnad per styck</span><span id="b-cost"></span></li>
     </ul>
+    <div class="banner" id="kalk-banner" hidden></div>
   </section>
 </div>
 
@@ -265,6 +266,8 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <p class="lead">Ändra vilket fält du vill. Övriga räknas om. Alla priser är exklusive moms om inget annat står.</p>
     <div class="banner" id="pris-link" style="margin:0 0 14px" hidden></div>
     <div class="grid">
+      <label class="f">Kalkylpris
+        <span class="inp"><input id="kalk" inputmode="decimal"><span class="u">kr</span></span></label>
       <label class="f">ÅF-pris netto
         <span class="inp"><input id="N" inputmode="decimal"><span class="u">kr</span></span></label>
       <label class="f">Täckningsgrad
@@ -281,9 +284,10 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
         <span class="inp"><input id="d" inputmode="decimal"><span class="u">%</span></span></label>
       <label class="f">Moms
         <span class="inp"><input id="vat" data-k="vat" inputmode="decimal"><span class="u">%</span></span></label>
-      <label class="f full">Mål för täckningsgrad
+      <label class="f">Mål för täckningsgrad
         <span class="inp"><input id="targetTG" data-k="targetTG" inputmode="decimal"><span class="u">%</span></span></label>
     </div>
+    <p class="note" id="kalk-note"></p>
     <h3 style="font-size:16px;margin-top:18px">Rabattsatser till återförsäljare</h3>
     <p class="note" style="margin-top:4px">Rabatten räknas på ordinarie försäljningspris exkl. moms. Tryck på en rad för att låta den rabattsatsen styra ÅF-pris netto.</p>
     <div class="scroll"><table>
@@ -499,11 +503,12 @@ function calc(st,m){
   var duty=(goods+freight)*st.duty/100;
   var sub=goods+freight+duty+st.other;
   var oh=sub*st.overhead/100;
-  var cost=sub+oh;
+  var cost=sub+oh, costCalc=cost;
+  if(typeof st.kalk==='number') cost=st.kalk; /* manuellt kalkylpris ersätter uträkningen */
   var neff=st.N*(1-st.campaign/100);
   var tb=neff-cost;
   var vat=st.vat/100;
-  return {rate:rate(st.cur),goods:goods,freight:freight,duty:duty,oh:oh,cost:cost,neff:neff,tb:tb,
+  return {costCalc:costCalc,rate:rate(st.cur),goods:goods,freight:freight,duty:duty,oh:oh,cost:cost,neff:neff,tb:tb,
     tg:neff>0?tb/neff:NaN, markup:cost>0?tb/cost:NaN,
     d:st.R>0?1-st.N/st.R:NaN, af:st.R>0?(st.R-neff)/st.R:NaN, afKr:st.R-neff,
     direct:st.R>0?(st.R-cost)/st.R:NaN, rin:st.R*(1+vat), vatKr:st.R*vat,
@@ -540,7 +545,12 @@ function render(){
 
   txt('b-rate',s.cur==='SEK'?'':'à '+fmt(c.rate,4)+' kr/'+s.cur);
   txt('b-goods',kr(c.goods)); txt('b-freight',kr(c.freight)); txt('b-duty',kr(c.duty));
-  txt('b-other',kr(s.other)); txt('b-oh',kr(c.oh)); txt('b-cost',kr(c.cost));
+  txt('b-other',kr(s.other)); txt('b-oh',kr(c.oh)); txt('b-cost',kr(c.costCalc));
+  var man=typeof s.kalk==='number', back='<button class="linkbtn" type="button" data-kalkreset="1">Använd uträkningen från Inköp</button>';
+  setIn('kalk',plain(c.cost,2));
+  $('kalk-note').innerHTML=man?'Kalkylpriset '+kr2(c.cost)+' är angivet manuellt och ersätter uträkningen på fliken Inköp ('+kr2(c.costCalc)+'). '+back:'Kalkylpriset hämtas från fliken Inköp. Skriv ett eget värde i rutan för att ersätta det.';
+  $('kalk-banner').hidden=!man;
+  $('kalk-banner').innerHTML=man?'<span>Kalkylen använder just nu ett manuellt kalkylpris på '+kr2(c.cost)+' i stället för självkostnaden ovan.</span>'+back:'';
 
   setIn('N',plain(s.N,0)); setIn('tg',plain(c.tg*100,1)); setIn('markup',plain(c.markup*100,1));
   setIn('Rex',plain(s.R,0)); setIn('Rin',plain(c.rin,0)); setIn('d',plain(c.d*100,1));
@@ -570,10 +580,10 @@ function render(){
   $('ladder').innerHTML=rows;
 
   /* Valutakänslighet */
-  var hasFx=s.cur!=='SEK'||(s.freightCur!=='SEK'&&s.freight>0);
+  var hasFx=typeof s.kalk!=='number'&&(s.cur!=='SEK'||(s.freightCur!=='SEK'&&s.freight>0));
   var lead=s.cur!=='SEK'?s.cur:s.freightCur;
   txt('fx-h',hasFx?'kr/'+lead:'kr');
-  txt('fx-lead',hasFx?'Så påverkas marginalen om kronan rör sig mot '+lead+' medan ÅF-priset ligger kvar på '+kr(s.N)+'.':'Inköpet är i kronor, så marginalen påverkas inte av valutakursen.');
+  txt('fx-lead',hasFx?'Så påverkas marginalen om kronan rör sig mot '+lead+' medan ÅF-priset ligger kvar på '+kr(s.N)+'.':(typeof s.kalk==='number'?'Kalkylpriset är angivet manuellt, så marginalen påverkas inte av valutakursen här.':'Inköpet är i kronor, så marginalen påverkas inte av valutakursen.'));
   rows='';
   [-10,-5,0,5,10].forEach(function(dv){
     var x=calc(s,1+dv/100);
@@ -614,6 +624,7 @@ document.addEventListener('input',function(e){
   if(el.dataset&&el.dataset.rate){ s.rates[el.dataset.rate]=num(el.value); render(); return; }
   var v=num(el.value), c=calc(s), camp=1-Math.min(s.campaign,99.9)/100;
   switch(el.id){
+    case 'kalk': s.kalk=el.value.trim()===''?null:v; break;
     case 'N': s.N=v; fromN(); break;
     case 'tg': if(v<100){ s.N=c.cost/(1-v/100)/camp; fromN(); } break;
     case 'markup': s.N=c.cost*(1+v/100)/camp; fromN(); break;
@@ -627,6 +638,7 @@ document.addEventListener('input',function(e){
 document.addEventListener('change',function(e){ if(e.target.tagName==='SELECT') e.target.dispatchEvent(new Event('input',{bubbles:true})); });
 document.addEventListener('focusout',function(){ setTimeout(render,0); });
 
+document.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('[data-kalkreset]')){ s.kalk=null; render(); } });
 function pickDisc(el){
   if(!el||el.dataset.disc===undefined) return;
   s.disc=el.dataset.disc===''?null:+el.dataset.disc; fromR(); render();
@@ -1018,7 +1030,7 @@ function pfToCalc(v){
 function pfLinkTo(i){
   var v=pf.np[i]!==undefined?pf.np[i]:pfCur(i), cost=pnum(pfCell(i,'cost'));
   s.name=(pfCell(i,'art')+' '+pfCell(i,'name')).trim();
-  if(pf.map.cost>-1&&cost>=0){ s.price=cost; s.cur='SEK'; s.qty=1; s.supDisc=0; s.freight=0; s.freightCur='SEK'; s.duty=0; s.other=0; s.overhead=0; }
+  if(pf.map.cost>-1) s.kalk=cost>=0?cost:null;
   pfToCalc(v);
   pf.link=i; pfSave(); fill(); render(); showTab('pris');
 }
