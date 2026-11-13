@@ -318,18 +318,18 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
 <div class="wrap panel" role="tabpanel" id="panel-prisfil" aria-labelledby="tab-prisfil" hidden>
   <section class="card wide">
     <h2>Prisfil från Visma</h2>
-    <p class="lead">Exportera artiklarna med nuvarande priser från Visma Administration 2000 som textfil och läs in filen här. Den stannar i den här webbläsaren.</p>
+    <p class="lead">Läs in en Excel-fil (.xlsx) med artiklar och nuvarande priser från Visma Administration 2000. Textfiler (tabb- eller semikolonavgränsade) går också bra. Filen stannar i den här webbläsaren.</p>
     <div class="chips" style="margin-top:0">
-      <input type="file" id="pf-file" class="vh" accept=".txt,.csv,.skv,.tsv,text/plain,text/csv">
+      <input type="file" id="pf-file" class="vh" accept=".xlsx,.txt,.csv,.skv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv">
       <label class="btn primary" for="pf-file">Välj fil</label>
       <span id="pf-info">Ingen fil inläst.</span>
       <button class="linkbtn" type="button" id="pf-clear" style="color:var(--crit)" hidden>Ta bort filen</button>
     </div>
     <div id="pf-setup" hidden>
       <div class="grid auto" style="margin-top:16px">
-        <label class="f">Avgränsare
+        <label class="f" id="pf-delim-f">Avgränsare
           <span class="inp sel"><select id="pf-delim"><option value="\t">Tabb</option><option value=";">Semikolon</option><option value=",">Komma</option><option value="|">Lodstreck</option></select></span></label>
-        <label class="f">Teckenkodning
+        <label class="f" id="pf-enc-f">Teckenkodning
           <span class="inp sel"><select id="pf-enc"><option value="windows-1252">Windows (ANSI)</option><option value="cp850">DOS (ASCII/OEM)</option><option value="utf-8">UTF-8</option><option value="utf-16le">Unicode (UTF-16)</option><option value="utf-16be">Unicode (UTF-16 BE)</option></select></span></label>
         <label class="f">Artikelnummer
           <span class="inp sel"><select data-pfmap="art"></select></span></label>
@@ -345,7 +345,7 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
           <span class="inp sel"><select id="pf-kind"><option value="N">ÅF-pris netto</option><option value="R">Rek. konsumentpris exkl. moms</option><option value="Rin">Konsumentpris inkl. moms</option></select></span></label>
       </div>
       <label class="check"><input type="checkbox" id="pf-header"> Första raden är kolumnrubriker</label>
-      <p class="note">Så här ser filens första rader ut, uppdelade i kolumner. Stämmer inte uppdelningen, byt avgränsare eller teckenkodning. Välj sedan rätt kolumn i listorna ovan.</p>
+      <p class="note" id="pf-prevnote"></p>
       <div class="scroll"><table id="pf-prev"></table></div>
     </div>
   </section>
@@ -376,13 +376,15 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
     <div class="chips"><span id="pf-shown"></span><button class="btn small" type="button" id="pf-more" hidden>Visa fler</button></div>
 
     <h2 style="margin-top:24px">Skapa ny prisfil</h2>
-    <p class="lead">Filen får samma kolumner, avgränsare och teckenkodning som den du läste in. Bara priskolumnen ändras.</p>
+    <p class="lead">Filen får samma kolumner i samma ordning som den du läste in. Bara priskolumnen ändras.</p>
     <div class="grid auto">
       <label class="f">Rader i filen
         <span class="inp sel"><select id="pf-which"><option value="all">Alla rader</option><option value="changed">Bara rader med ändrat pris</option></select></span></label>
+      <label class="f">Filformat
+        <span class="inp sel"><select id="pf-fmt"></select></span></label>
     </div>
     <div class="chips"><button class="btn primary" type="button" id="pf-export">Skapa prisfil</button><span id="pf-exnote"></span></div>
-    <p class="note">Ta en säkerhetskopia i Visma innan du läser in filen, och läs in den med samma fältordning som vid exporten.</p>
+    <p class="note">Välj det format som Vismas import tar emot. Ta en säkerhetskopia i Visma innan du läser in filen, och läs in den med samma fältordning som vid exporten.</p>
   </section>
 </div>
 
@@ -678,9 +680,14 @@ function pfDetectEnc(b){
 function pfHasBom(b){return (b[0]===0xEF&&b[1]===0xBB&&b[2]===0xBF)||(b[0]===0xFF&&b[1]===0xFE)||(b[0]===0xFE&&b[1]===0xFF)}
 function pfLoad(buf,name){
   var b=new Uint8Array(buf);
-  if((b[0]===0x50&&b[1]===0x4B)||(b[0]===0xD0&&b[1]===0xCF)||(b[0]===0x25&&b[1]===0x50&&b[2]===0x44&&b[3]===0x46)){
-    pfMsg=name+' är en Excel- eller PDF-fil och kan inte läsas in. Exportera artiklarna från Visma som textfil (tabb- eller semikolonavgränsad) och välj den filen.';
-    pfInfo(); return;
+  if(b[0]===0x50&&b[1]===0x4B){ pfLoadXlsx(b,name); return; }
+  if(b[0]===0xD0&&b[1]===0xCF){
+    pfMsg=name+' är en äldre Excel-fil (.xls) som inte kan läsas in. Öppna den i Excel, välj Spara som och formatet Excel-arbetsbok (.xlsx), och välj sedan den filen.';
+    pf=null; pfRender(); return;
+  }
+  if(b[0]===0x25&&b[1]===0x50&&b[2]===0x44&&b[3]===0x46){
+    pfMsg=name+' är en PDF-fil och kan inte läsas in. Välj en Excel-fil (.xlsx) eller en textfil.';
+    pf=null; pfRender(); return;
   }
   pfMsg='';
   var enc=pfDetectEnc(b);
@@ -689,12 +696,156 @@ function pfLoad(buf,name){
   pfReparse(); pfGuess(); pfLimit=200; $('pf-q').value='';
   pfRender(); pfSave();
 }
+function pfLoadXlsx(b,name){
+  pf=null; pfMsg='Läser '+name+' …'; pfRender();
+  xlsxRead(b).then(function(res){
+    if(!res.rows.length) throw new Error('tom');
+    /* bladet görs om till tabbavgränsad text så att resten av sidan arbetar likadant oavsett filtyp */
+    var text=res.rows.map(function(r){return r.map(function(v){return /["\t\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join('\t')}).join('\r\n')+'\r\n';
+    pfMsg='';
+    pf={name:name,src:'xlsx',sheet:res.sheet,xt:res.types,enc:'windows-1252',bom:false,delim:'\t',text:text,kind:'N',np:{},link:null};
+    pfReparse(); pfGuess(); pfLimit=200; $('pf-q').value='';
+    pfRender(); pfSave();
+  }).catch(function(){
+    pf=null; pfMsg=name+' gick inte att läsa som Excel-fil. Kontrollera att det är en .xlsx-fil som inte är lösenordsskyddad.'; pfRender();
+  });
+}
+
+/* Excel (.xlsx): en zip-fil med XML. Läser första bladet och skriver en ny enkel arbetsbok. */
+function zipRead(b){
+  var dv=new DataView(b.buffer,b.byteOffset,b.byteLength), i=b.length-22, files={};
+  while(i>=0&&dv.getUint32(i,true)!==0x06054b50) i--;
+  if(i<0) throw new Error('zip');
+  var n=dv.getUint16(i+10,true), o=dv.getUint32(i+16,true);
+  for(var k=0;k<n;k++){
+    if(dv.getUint32(o,true)!==0x02014b50) throw new Error('zip');
+    var nl=dv.getUint16(o+28,true), el=dv.getUint16(o+30,true), cl=dv.getUint16(o+32,true), lo=dv.getUint32(o+42,true);
+    var nm=new TextDecoder().decode(b.subarray(o+46,o+46+nl));
+    var ds=lo+30+dv.getUint16(lo+26,true)+dv.getUint16(lo+28,true);
+    files[nm]={method:dv.getUint16(o+10,true),data:b.subarray(ds,ds+dv.getUint32(o+20,true))};
+    o+=46+nl+el+cl;
+  }
+  return files;
+}
+function zipText(files,name){
+  var f=files[name]; if(!f) return Promise.resolve(null);
+  var dec=function(buf){return new TextDecoder().decode(buf)};
+  if(f.method===0) return Promise.resolve(dec(f.data));
+  if(f.method!==8||typeof DecompressionStream==='undefined') return Promise.reject(new Error('zip'));
+  return new Response(new Blob([f.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer().then(dec);
+}
+function xmlDoc(str){ var d=new DOMParser().parseFromString(str,'application/xml'); if(d.getElementsByTagName('parsererror').length) throw new Error('xml'); return d; }
+function xmlAll(node,tag){return [].slice.call(node.getElementsByTagNameNS('*',tag))}
+function xlsxRead(b){
+  var files=zipRead(b), sheetName='', path='xl/worksheets/sheet1.xml';
+  return Promise.all([zipText(files,'xl/workbook.xml'),zipText(files,'xl/_rels/workbook.xml.rels'),zipText(files,'xl/sharedStrings.xml')]).then(function(a){
+    var ss=[];
+    if(a[2]) xmlAll(xmlDoc(a[2]),'si').forEach(function(si){
+      ss.push(xmlAll(si,'t').filter(function(x){return x.parentNode.localName!=='rPh'}).map(function(x){return x.textContent}).join(''));
+    });
+    if(a[0]&&a[1]){
+      var sh=xmlAll(xmlDoc(a[0]),'sheet')[0];
+      if(sh){
+        sheetName=sh.getAttribute('name')||'';
+        var rid=sh.getAttribute('r:id')||sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+        xmlAll(xmlDoc(a[1]),'Relationship').forEach(function(r){
+          if(r.getAttribute('Id')===rid){ var tg=r.getAttribute('Target')||''; path=tg.charAt(0)==='/'?tg.slice(1):'xl/'+tg; }
+        });
+      }
+    }
+    return zipText(files,path).then(function(xml){
+      if(!xml) throw new Error('blad');
+      var rows=[], types=[], width=0;
+      xmlAll(xmlDoc(xml),'row').forEach(function(rw){
+        var vals=[], ty=[], next=0;
+        xmlAll(rw,'c').forEach(function(c){
+          var ref=/^([A-Z]+)/.exec(c.getAttribute('r')||''), col=next, i;
+          if(ref){ col=0; for(i=0;i<ref[1].length;i++) col=col*26+ref[1].charCodeAt(i)-64; col--; }
+          next=col+1;
+          var t=c.getAttribute('t')||'n', vEl=xmlAll(c,'v')[0], v=vEl?vEl.textContent:'', out='', kind='s';
+          if(t==='s') out=ss[+v]||'';
+          else if(t==='inlineStr') out=xmlAll(c,'t').map(function(x){return x.textContent}).join('');
+          else if(t==='n'){ if(v!==''&&isFinite(+v)){ out=String(+(+v).toFixed(10)).replace('.',','); kind='n'; } }
+          else out=v;
+          while(vals.length<col){vals.push('');ty.push('s')}
+          vals[col]=out; ty[col]=kind;
+        });
+        if(vals.some(function(v){return v!==''})){ rows.push(vals); types.push(ty); width=Math.max(width,vals.length); }
+      });
+      rows.forEach(function(r,i){ while(r.length<width){r.push('');types[i].push('s')} });
+      return {rows:rows,types:types.map(function(x){return x.join('')}),sheet:sheetName};
+    });
+  });
+}
+var CRCT=null;
+function crc32(b){
+  var i,j,c;
+  if(!CRCT){ CRCT=new Uint32Array(256); for(i=0;i<256;i++){ c=i; for(j=0;j<8;j++) c=c&1?0xEDB88320^(c>>>1):c>>>1; CRCT[i]=c; } }
+  c=0xFFFFFFFF; for(i=0;i<b.length;i++) c=CRCT[(c^b[i])&255]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+function zipWrite(list){
+  var enc=new TextEncoder(), parts=[], cd=[], off=0, cdSize=0;
+  list.forEach(function(f){
+    var nm=enc.encode(f[0]), data=enc.encode(f[1]), crc=crc32(data);
+    var h=new DataView(new ArrayBuffer(30)), c=new DataView(new ArrayBuffer(46));
+    h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(12,33,true);
+    h.setUint32(14,crc,true); h.setUint32(18,data.length,true); h.setUint32(22,data.length,true); h.setUint16(26,nm.length,true);
+    c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true); c.setUint16(14,33,true);
+    c.setUint32(16,crc,true); c.setUint32(20,data.length,true); c.setUint32(24,data.length,true); c.setUint16(28,nm.length,true); c.setUint32(42,off,true);
+    parts.push(new Uint8Array(h.buffer),nm,data); cd.push(new Uint8Array(c.buffer),nm);
+    off+=30+nm.length+data.length; cdSize+=46+nm.length;
+  });
+  var e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true); e.setUint16(8,list.length,true); e.setUint16(10,list.length,true); e.setUint32(12,cdSize,true); e.setUint32(16,off,true);
+  return new Blob(parts.concat(cd,[new Uint8Array(e.buffer)]),{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function xesc(v){return String(v).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function colName(i){var s='';i++;while(i>0){s=String.fromCharCode(65+(i-1)%26)+s;i=Math.floor((i-1)/26)}return s}
+function xlsxWrite(rows,sheet){
+  var H='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', M='http://schemas.openxmlformats.org/spreadsheetml/2006/main', R='http://schemas.openxmlformats.org/officeDocument/2006/relationships', P='http://schemas.openxmlformats.org/package/2006/relationships';
+  var x=[H+'<worksheet xmlns="'+M+'"><sheetData>'];
+  rows.forEach(function(r,ri){
+    var s='<row r="'+(ri+1)+'">';
+    r.forEach(function(c,ci){
+      if(c.v==='') return;
+      var ref=colName(ci)+(ri+1);
+      s+=c.n?'<c r="'+ref+'"><v>'+c.v+'</v></c>':'<c r="'+ref+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(c.v)+'</t></is></c>';
+    });
+    x.push(s+'</row>');
+  });
+  x.push('</sheetData></worksheet>');
+  var nm=xesc((sheet||'Priser').replace(/[\[\]:*?\/\\]/g,' ').slice(0,31));
+  return zipWrite([
+    ['[Content_Types].xml',H+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'],
+    ['_rels/.rels',H+'<Relationships xmlns="'+P+'"><Relationship Id="rId1" Type="'+R+'/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml',H+'<workbook xmlns="'+M+'" xmlns:r="'+R+'"><sheets><sheet name="'+nm+'" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels',H+'<Relationships xmlns="'+P+'"><Relationship Id="rId1" Type="'+R+'/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/worksheets/sheet1.xml',x.join('')]
+  ]);
+}
+function pfBuildX(onlyChanged){
+  var col=pf.map.price, cost=pf.map.cost, out=[], n=0;
+  pf.rows.forEach(function(r,idx){
+    var data=idx>=pfStart(), ch=data&&pfChanged(idx);
+    if(onlyChanged&&data&&!ch) return;
+    if(ch) n++;
+    out.push(r.map(function(v,c){
+      if(ch&&c===col) return {v:pf.np[idx],n:true};
+      var isN=pf.src==='xlsx'?(pf.xt&&pf.xt[idx]&&pf.xt[idx].charAt(c)==='n'):(data&&(c===col||c===cost));
+      var x=isN?pnum(v):NaN;
+      return isNaN(x)?{v:v,n:false}:{v:x,n:true};
+    }));
+  });
+  return {rows:out,changed:n};
+}
+
 function pfSave(){
   clearTimeout(pfTimer);
   pfTimer=setTimeout(function(){
     try{
       if(!pf) localStorage.removeItem(PFKEY);
-      else localStorage.setItem(PFKEY,JSON.stringify({name:pf.name,enc:pf.enc,bom:pf.bom,text:pf.text,delim:pf.delim,header:pf.header,map:pf.map,kind:pf.kind,np:pf.np,link:pf.link}));
+      else localStorage.setItem(PFKEY,JSON.stringify({name:pf.name,enc:pf.enc,bom:pf.bom,text:pf.text,delim:pf.delim,header:pf.header,map:pf.map,kind:pf.kind,np:pf.np,link:pf.link,src:pf.src,sheet:pf.sheet,xt:pf.xt}));
       pfStoreFail=false;
     }catch(e){pfStoreFail=true}
     pfInfo();
@@ -722,7 +873,7 @@ function pfTgHtml(i){
 }
 function pfInfo(){
   if(!pf){ txt('pf-info',pfMsg||'Ingen fil inläst.'); return; }
-  txt('pf-info',pf.name+' · '+fmt(pf.rows.length-pfStart())+' artiklar · '+(DELIM_NAME[pf.delim]||'')+' · '+(ENC_NAME[pf.enc]||pf.enc)+
+  txt('pf-info',pf.name+' · '+fmt(pf.rows.length-pfStart())+' artiklar · '+(pf.src==='xlsx'?'Excel'+(pf.sheet?', bladet '+pf.sheet:''):(DELIM_NAME[pf.delim]||'')+' · '+(ENC_NAME[pf.enc]||pf.enc))+
     (pfStoreFail?' · Filen är för stor för att sparas i webbläsaren. Skapa prisfilen innan du stänger sidan.':''));
 }
 function pfSummary(){
@@ -746,7 +897,13 @@ function pfRender(){
   $('pf-setup').hidden=!on; $('pf-work').hidden=!on; $('pf-clear').hidden=!on;
   pfInfo();
   if(!on){ txt('pf-count',''); return; }
-  var nc=pfNcol(), m=pf.map, first=pf.rows[pfStart()]||[];
+  var nc=pfNcol(), m=pf.map, first=pf.rows[pfStart()]||[], isX=pf.src==='xlsx';
+  $('pf-delim-f').hidden=isX; $('pf-enc-f').hidden=isX;
+  txt('pf-prevnote','Så här ser filens första rader ut, uppdelade i kolumner. '+(isX?'':'Stämmer inte uppdelningen, byt avgränsare eller teckenkodning. ')+'Välj sedan rätt kolumn i listorna ovan.');
+  var fs=$('pf-fmt'), fv=fs.dataset.src===(pf.src||'text')?fs.value:'';
+  fs.innerHTML=isX?'<option value="xlsx">Excel (.xlsx)</option><option value="tab">Textfil, tabbavgränsad</option><option value="semi">Textfil, semikolonavgränsad</option>'
+    :'<option value="same">Samma format som den inlästa filen</option><option value="xlsx">Excel (.xlsx)</option>';
+  fs.dataset.src=pf.src||'text'; if(fv) fs.value=fv;
   $('pf-delim').value=pf.delim; $('pf-enc').value=pf.enc; if(pf.map.group===undefined) pf.map.group=-1; $('pf-header').checked=pf.header; $('pf-kind').value=pf.kind;
   document.querySelectorAll('[data-pfmap]').forEach(function(sel){
     var k=sel.dataset.pfmap, h=(k==='cost'||k==='name'||k==='group')?'<option value="-1">Ingen</option>':'';
@@ -787,12 +944,12 @@ function pfFormat(orig,v,dsep,dec){
   if(Math.abs(+v.toFixed(d)-v)>0.0001) d=2;
   return v.toFixed(d).replace('.',sep);
 }
-function pfBuild(onlyChanged){
+function pfBuild(onlyChanged,delim){
   var col=pf.map.price, dsep=',', dec=2, i, mm;
   for(i=pfStart();i<pf.rows.length;i++){ mm=/([.,])(\d+)$/.exec(pf.rows[i][col]||''); if(mm){dsep=mm[1];dec=mm[2].length;break} }
   if(i===pf.rows.length) dec=0;
   var eol=/\r\n/.test(pf.text)?'\r\n':(/\r/.test(pf.text)?'\r':'\n'), lines=[], n=0;
-  var needQ=new RegExp('["\\r\\n'+(pf.delim==='|'?'\\|':pf.delim)+']');
+  var needQ=new RegExp('["\\r\\n'+(delim==='|'?'\\|':delim)+']');
   pf.rows.forEach(function(r,idx){
     var ch=idx>=pfStart()&&pfChanged(idx);
     if(onlyChanged&&idx>=pfStart()&&!ch) return;
@@ -800,7 +957,7 @@ function pfBuild(onlyChanged){
     lines.push(r.map(function(v,c){
       if(ch&&c===col) v=pfFormat(v,pf.np[idx],dsep,dec);
       return (pf.q[idx][c]||needQ.test(v))?'"'+v.replace(/"/g,'""')+'"':v;
-    }).join(pf.delim));
+    }).join(delim));
   });
   return {text:lines.join(eol)+(/[\r\n]$/.test(pf.text)?eol:''),changed:n};
 }
@@ -877,10 +1034,11 @@ $('panel-prisfil').addEventListener('click',function(e){
   }else if(b.dataset.pfunlink){ pf.link=null;
   }else if(b.id==='pf-export'){
     if(pf.map.price<0){ txt('pf-exnote','Välj först vilken kolumn som är priset.'); return; }
-    var res=pfBuild($('pf-which').value==='changed');
+    var only=$('pf-which').value==='changed', f=$('pf-fmt').value, isXl=f==='xlsx';
+    var res=isXl?pfBuildX(only):pfBuild(only,f==='tab'?'\t':f==='semi'?';':pf.delim);
     if(!res.changed){ txt('pf-exnote','Inga priser är ändrade, så det finns inget att skriva ut.'); return; }
-    var dot=pf.name.lastIndexOf('.'), fn=(dot>0?pf.name.slice(0,dot):pf.name)+'-nya-priser'+(dot>0?pf.name.slice(dot):'.txt');
-    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([pfEncode(res.text)],{type:'application/octet-stream'}));
+    var dot=pf.name.lastIndexOf('.'), fn=(dot>0?pf.name.slice(0,dot):pf.name)+'-nya-priser'+(isXl?'.xlsx':f==='same'&&dot>0?pf.name.slice(dot):'.txt');
+    var a=document.createElement('a'); a.href=URL.createObjectURL(isXl?xlsxWrite(res.rows,pf.sheet):new Blob([pfEncode(res.text)],{type:'application/octet-stream'}));
     a.download=fn; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
     pfSummary(); txt('pf-exnote',fn+' skapad med '+fmt(res.changed)+' ändrade priser.'); return;
   }else return;
