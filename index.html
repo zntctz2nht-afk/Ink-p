@@ -1454,7 +1454,7 @@ function supAddFiles(sid,files,asInvoice){
             .then(function(){
               var rec={id:id,name:f.name,size:f.size,added:Date.now(),kind:res.kind,rows:res.rows};
               if(asInvoice){ invInit(sp,rec); sp.invoices.push(rec); ui.openInv=id; }
-              else{ sp.files.push(rec); ui.open=id; ui.q=''; ui.limit=100; }
+              else{ plInit(sp,rec); sp.files.push(rec); ui.open=id; ui.q=''; ui.limit=100; ui.cmp=null; ui.view='all'; }
               if(!res.rows.length) bad.push(f.name+' (ingen text hittades – är det en inskannad bild?)');
               else if(asInvoice&&!invLines(sp,rec).length) bad.push(f.name+' (inga fakturarader hittades – kontrollera kolumnvalen)');
               else if(asInvoice&&invDup(sp,rec)) bad.push(f.name+' (samma fakturanummer som '+invDup(sp,rec).name+' – möjlig dubblett)');
@@ -1686,21 +1686,82 @@ $('reg-body').addEventListener('click',function(e){
   regRender();
 });
 
+/* Prislistor: kolumner pekas ut på samma sätt som för fakturor, så att priserna kan kopplas till egna artiklar och jämföras mellan versioner. */
+function plInit(sp,f){
+  var lines=(f.rows||[]).map(function(r){return r.join(' ')}), i, m, nc=0;
+  (f.rows||[]).slice(0,300).forEach(function(r){nc=Math.max(nc,r.length)});
+  f.cur='';
+  for(i=0;i<lines.length&&!f.cur;i++){ m=/\b(SEK|EUR|USD|GBP|NOK|DKK|CNY)\b/.exec(lines[i]); if(m) f.cur=m[1]; else if(/€/.test(lines[i])) f.cur='EUR'; }
+  if(!f.cur) f.cur=sp.info.cur||'SEK';
+  f.date=new Date(f.added||Date.now()).toLocaleDateString('sv-SE');
+  if(sp.plMap&&sp.plMapN===nc) f.map=JSON.parse(JSON.stringify(sp.plMap));
+  else{ var g=invGuessMap(f.rows||[],nc); f.map={art:g.art,name:g.name,price:g.price>-1?g.price:g.total}; }
+}
+function plLines(f){
+  var m=f.map||{}, out=[], cell=function(r,k){return m[k]>-1?String(r[m[k]]||'').trim():''};
+  if(!(m.price>-1)) return out;
+  (f.rows||[]).forEach(function(r,i){
+    var art=cell(r,'art'), name=cell(r,'name'), price=inum(cell(r,'price'));
+    if(isNaN(price)||price<=0||(!art&&!name)) return;
+    out.push({i:i,art:art,name:name,price:price,key:(art?art.toLowerCase():'d:'+name.toLowerCase())});
+  });
+  return out;
+}
 function supTable(sid){
   var sp=supFind(sid), ui=supUiOf(sid), box=$('sup-tbl-'+sid); if(!box) return;
   var f=null; sp.files.forEach(function(x){if(x.id===ui.open)f=x});
   if(!f){ box.innerHTML=''; return; }
-  var rows=f.rows||[], nc=0; rows.slice(0,200).forEach(function(r){nc=Math.max(nc,r.length)});
-  var q=ui.q.trim().toLowerCase(), hit=q?rows.filter(function(r){return r.join(' ').toLowerCase().indexOf(q)>-1}):rows;
-  var h='<thead><tr>'; for(var c=0;c<nc;c++) h+='<th style="text-align:left">Kolumn '+(c+1)+'</th>';
-  h+='</tr></thead><tbody>';
-  hit.slice(0,ui.limit).forEach(function(r){
-    h+='<tr>'; for(var c=0;c<nc;c++){ var v=r[c]||''; h+='<td'+(!isNaN(pnum(v))?' class="num"':'')+'>'+esc(v)+'</td>'; } h+='</tr>';
-  });
-  box.innerHTML='<h3 style="font-size:16px;margin-top:18px">'+esc(f.name)+'</h3>'+
-    (rows.length?'<div class="grid auto" style="margin-top:8px"><label class="f">Sök i listan<span class="inp"><input type="search" data-supq="'+sid+'" value="'+esc(ui.q)+'" placeholder="Artikel, benämning eller pris"></span></label></div>'+
-      '<div class="scroll"><table>'+h+'</tbody></table></div>'+
-      '<div class="chips"><span>Visar '+fmt(Math.min(ui.limit,hit.length))+' av '+fmt(hit.length)+' rader.</span>'+(hit.length>ui.limit?'<button class="btn small" type="button" data-act="more" data-sid="'+sid+'">Visa fler</button>':'')+'</div>'+
+  if(!f.map) plInit(sp,f);
+  var rows=f.rows||[], nc=0, c, k; rows.slice(0,300).forEach(function(r){nc=Math.max(nc,r.length)});
+  var at=' data-sid="'+sid+'" data-fid="'+f.id+'"', ls=plLines(f), first=rows[ls.length?ls[0].i:0]||[], q=ui.q.trim().toLowerCase();
+  var sel=function(k,label){
+    var h='<label class="f">'+label+'<span class="inp sel"><select data-plmap="'+k+'"'+at+'><option value="-1">Ingen</option>';
+    for(var c=0;c<nc;c++){ var ex=String(first[c]||'').slice(0,16); h+='<option value="'+c+'"'+(f.map[k]===c?' selected':'')+'>'+esc('Kolumn '+(c+1)+(ex?' ('+ex+')':''))+'</option>'; }
+    return h+'</select></span></label>';
+  };
+  var others=sp.files.filter(function(x){return x!==f&&x.map&&plLines(x).length}), cmp=null;
+  others.forEach(function(x){if(x.id===ui.cmp)cmp=x});
+  var stat=null, view=cmp?(ui.view||'all'):'all';
+  if(cmp){
+    var old={}, seen={}; plLines(cmp).forEach(function(l){old[l.key]=l.price});
+    stat={up:0,down:0,same:0,neu:0,gone:0,sum:0,n:0};
+    ls.forEach(function(l){
+      seen[l.key]=1; var o=old[l.key];
+      if(o===undefined){ l.st='new'; stat.neu++; return; }
+      l.old=o; l.chg=l.price/o-1; stat.sum+=l.chg; stat.n++;
+      if(Math.abs(l.chg)<0.00005){ l.st='same'; stat.same++; } else{ l.st='chg'; stat[l.chg>0?'up':'down']++; }
+    });
+    for(k in old) if(!seen[k]) stat.gone++;
+  }
+  var head='<h3 style="font-size:16px;margin-top:18px">'+esc(f.name)+'</h3>'+
+    '<div class="grid auto" style="margin-top:8px">'+sel('art','Artikelnummer')+sel('name','Benämning')+sel('price','Pris')+
+      '<label class="f">Valuta<span class="inp sel"><select data-plf="cur"'+at+'>'+['SEK'].concat(CURS).map(function(c){return '<option'+(c===f.cur?' selected':'')+'>'+c+'</option>'}).join('')+'</select></span></label>'+
+      '<label class="f">Gäller från<span class="inp"><input type="date" data-plf="date"'+at+' value="'+esc(f.date||'')+'"></span></label>'+
+      (others.length?'<label class="f">Jämför med<span class="inp sel"><select data-plf="cmp"'+at+'><option value="">Ingen jämförelse</option>'+others.map(function(x){return '<option value="'+x.id+'"'+(cmp===x?' selected':'')+'>'+esc(x.name+(x.date?' ('+x.date+')':''))+'</option>'}).join('')+'</select></span></label>':'')+
+      (cmp?'<label class="f">Visa<span class="inp sel"><select data-plf="view"'+at+'><option value="all"'+(view==='all'?' selected':'')+'>Alla rader</option><option value="chg"'+(view==='chg'?' selected':'')+'>Bara ändrade priser</option><option value="new"'+(view==='new'?' selected':'')+'>Bara nya artiklar</option></select></span></label>':'')+
+    '</div>';
+  var rawTbl='<thead><tr>'; for(c=0;c<nc;c++) rawTbl+='<th>Kolumn '+(c+1)+'</th>'; rawTbl+='</tr></thead><tbody>';
+  var body, count;
+  if(ls.length){
+    var hit=ls.filter(function(l){return (view==='all'||l.st===view)&&(!q||(l.art+' '+l.name).toLowerCase().indexOf(q)>-1)});
+    count=hit.length;
+    body='<div class="scroll"><table><thead><tr><th>Art.nr</th><th>Benämning</th><th style="text-align:right">Pris '+esc(f.cur)+'</th>'+(cmp?'<th style="text-align:right">Förra priset</th><th style="text-align:right">Ändring</th>':'')+'<th>Min artikel</th></tr></thead><tbody>'+
+      hit.slice(0,ui.limit).map(function(l){
+        return '<tr><td>'+esc(l.art)+'</td><td>'+esc(l.name)+'</td><td class="num">'+fmt(l.price,2)+'</td>'+
+          (cmp?'<td class="num">'+(l.old!==undefined?fmt(l.old,2):'ny')+'</td><td class="num '+(l.st==='chg'?(l.chg>0?'neg':'ok'):'')+'">'+(l.st==='chg'?(l.chg>0?'+':'−')+fmt(Math.abs(l.chg*100),1)+' %':l.st==='same'?'oförändrat':'')+'</td>':'')+
+          '<td><input class="lnk" list="my-arts" data-linkkey="'+esc(l.key)+'" data-sid="'+sid+'" aria-label="Min artikel för '+esc(l.art||l.name)+'" placeholder="Koppla till min artikel" value="'+esc(artLabel(sp.links[l.key]))+'"></td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }else{
+    var rhit=q?rows.filter(function(r){return r.join(' ').toLowerCase().indexOf(q)>-1}):rows;
+    count=rhit.length;
+    body='<p class="note">Inga priser kunde tolkas med de här kolumnvalen. Välj vilken kolumn som är priset, så blir listan sökbar per artikel och går att koppla till dina artiklar. Nedan visas filens innehåll som det lästes in.</p>'+
+      '<div class="scroll"><table>'+rawTbl+rhit.slice(0,ui.limit).map(function(r){var h='<tr>';for(var c=0;c<nc;c++){var v=r[c]||'';h+='<td'+(!isNaN(pnum(v))?' class="num"':'')+'>'+esc(v)+'</td>'}return h+'</tr>'}).join('')+'</tbody></table></div>';
+  }
+  box.innerHTML=head+
+    (stat?'<p class="note" style="color:var(--text)">Jämfört med '+esc(cmp.name)+': <b>'+stat.up+'</b> höjda, <b>'+stat.down+'</b> sänkta, '+stat.same+' oförändrade, <b>'+stat.neu+'</b> nya och '+stat.gone+' borttagna artiklar.'+(stat.n?' Genomsnittlig prisändring '+(stat.sum>=0?'+':'−')+fmt(Math.abs(stat.sum/stat.n*100),1)+' %.':'')+'</p>':'')+
+    (rows.length?'<div class="grid auto" style="margin-top:8px"><label class="f">Sök i listan<span class="inp"><input type="search" data-supq="'+sid+'" value="'+esc(ui.q)+'" placeholder="Artikelnummer eller benämning"></span></label></div>'+body+
+      '<div class="chips"><span>Visar '+fmt(Math.min(ui.limit,count))+' av '+fmt(count)+' rader.</span>'+(count>ui.limit?'<button class="btn small" type="button" data-act="more" data-sid="'+sid+'">Visa fler</button>':'')+'</div>'+
+      (ls.length?'<details class="raw"><summary>Visa allt som lästes ur filen</summary><div class="scroll"><table>'+rawTbl+rows.slice(0,150).map(function(r){var h='<tr>';for(var c=0;c<nc;c++)h+='<td>'+esc(r[c]||'')+'</td>';return h+'</tr>'}).join('')+'</tbody></table></div></details>':'')+
       (f.kind==='PDF'?'<p class="note">Listan är tolkad ur PDF-filens text. Kolumnerna kan hamna fel om prislistan har en ovanlig layout – jämför med originalet vid tveksamhet.</p>':'')
     :'<p class="note">Ingen text kunde läsas ur filen. Originalet finns kvar och går att öppna.</p>');
 }
@@ -1741,7 +1802,7 @@ function supRender(){
       '<div class="chips"><input type="file" class="vh" id="sup-file-'+sp.id+'" data-supfile="'+sp.id+'" multiple accept="'+ACC+'">'+
       '<label class="btn" for="sup-file-'+sp.id+'">Ladda upp prislista</label><span>'+esc(ui.msg||(sp.files.length?'':'Inga prislistor uppladdade än.'))+'</span></div>'+
       (sp.files.length?'<ul class="files">'+sp.files.map(function(f){
-        return item(f,ui.open===f.id,f.kind+' · '+fmt((f.rows||[]).length)+' rader · '+fmtSize(f.size||0)+' · '+new Date(f.added).toLocaleDateString('sv-SE'),{show:'show',open:'Visa lista',hide:'Dölj lista',del:'delfile'});
+        return item(f,ui.open===f.id,f.kind+' · '+(f.map&&plLines(f).length?fmt(plLines(f).length)+' priser':fmt((f.rows||[]).length)+' rader')+' · '+(f.cur||'')+' · gäller från '+(f.date||new Date(f.added).toLocaleDateString('sv-SE')),{show:'show',open:'Visa lista',hide:'Dölj lista',del:'delfile'});
       }).join('')+'</ul>':'')+
       '<div id="sup-tbl-'+sp.id+'"></div></section>';
   }).join('');
@@ -1760,6 +1821,23 @@ $('sup-list').addEventListener('change',function(e){
   if(d.supfile&&el.files&&el.files.length){ supAddFiles(d.supfile,el.files,d.kind==='inv'); return; }
   sp=supFind(d.sid);
   if(sp&&d.supinfo){ sp.info[d.supinfo]=el.value.trim(); supSave(); return; }
+  if(sp&&d.linkkey!==undefined){
+    var a=artParse(el.value), key=d.linkkey;
+    if(a) sp.links[key]=a; else delete sp.links[key];
+    [].forEach.call(document.querySelectorAll('#sup-list input[data-linkkey]'),function(x){ if(x.dataset.sid===sp.id&&x.dataset.linkkey===key&&x!==document.activeElement) x.value=artLabel(a); });
+    regRender(); supSave(); return;
+  }
+  if(sp&&(d.plmap||d.plf)){
+    var pl=null, pui=supUiOf(sp.id); sp.files.forEach(function(x){if(x.id===d.fid)pl=x}); if(!pl) return;
+    if(d.plmap){
+      var pn=0; (pl.rows||[]).slice(0,300).forEach(function(r){pn=Math.max(pn,r.length)});
+      pl.map[d.plmap]=+el.value; sp.plMap=JSON.parse(JSON.stringify(pl.map)); sp.plMapN=pn; supSave(); supRender();
+      var ps=document.querySelector('[data-plmap="'+d.plmap+'"][data-fid="'+pl.id+'"]'); if(ps) ps.focus();
+    }
+    else if(d.plf==='cmp'||d.plf==='view'){ pui[d.plf]=el.value||null; pui.limit=100; supTable(sp.id); }
+    else{ pl[d.plf]=el.value; supSave(); }
+    return;
+  }
   inv=sp&&d.iid?invFind(sp,d.iid):null; if(!inv) return;
   if(d.invf){
     /* bara registret, radernas sammanfattning och hemtaget pris ritas om, så att fokus inte tappas i fälten */
@@ -1773,11 +1851,6 @@ $('sup-list').addEventListener('change',function(e){
     inv.map[d.invmap]=+el.value; sp.invMap=JSON.parse(JSON.stringify(inv.map)); sp.invMapN=nc;
     invTable(sp.id); if($('inv-meta-'+inv.id)) txt('inv-meta-'+inv.id,invMeta(sp,inv)); regRender(); supSave();
     var again=document.querySelector('[data-invmap="'+d.invmap+'"][data-iid="'+inv.id+'"]'); if(again) again.focus();
-  }else if(d.linkkey!==undefined){
-    var a=artParse(el.value), key=d.linkkey;
-    if(a) sp.links[key]=a; else delete sp.links[key];
-    [].forEach.call(document.querySelectorAll('#sup-list input[data-linkkey]'),function(x){ if(x.dataset.sid===sp.id&&x.dataset.linkkey===key&&x!==document.activeElement) x.value=artLabel(a); });
-    regRender(); supSave();
   }
 });
 $('sup-list').addEventListener('toggle',function(e){ var el=e.target; if(el.dataset&&el.dataset.supdet) supUiOf(el.dataset.supdet).info=el.open; },true);
