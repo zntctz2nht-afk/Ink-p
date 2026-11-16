@@ -492,6 +492,8 @@ td input{width:92px;border:1px solid var(--line);border-radius:8px;background:va
         <span class="inp"><input type="search" id="art-q" placeholder="Nummer, benämning eller grupp"></span></label>
       <label class="f">Visa
         <span class="inp sel"><select id="art-f"><option value="all">Alla artiklar</option><option value="act">Behöver åtgärd</option><option value="buy">Med inköpshistorik</option><option value="evm">Från EVM</option></select></span></label>
+      <label class="f">Artikelgrupp
+        <span class="inp sel"><select id="art-g"></select></span></label>
       <label class="f">Bevaka marginalen vid rabattsats
         <span class="inp sel"><select id="art-disc"></select></span></label>
     </div>
@@ -2040,7 +2042,7 @@ $('sup-list').addEventListener('click',function(e){
 idbDo('readonly',function(st){return st.get('suppliers')}).then(function(v){ if(Array.isArray(v)) sups=v.map(supNorm); },function(){ supDbFail=true; }).then(function(){ supRender(); supStatus(); supReady=true; syUi(); sySync(); });
 
 /* Artiklar: ett kort per artikel som samlar prisfilen (Visma), EVM, fakturor och prislistor, med bevakning av marginalen. */
-var artUi={q:'',f:'all',open:null,limit:100};
+var artUi={q:'',f:'all',g:'',open:null,limit:100};
 function artKey(nr,name){ nr=String(nr||'').trim().toLowerCase(); return nr||('n:'+String(name||'').trim().toLowerCase()); }
 function artData(){
   var map={}, list=[], i, a;
@@ -2129,9 +2131,15 @@ function artRender(){
   all.forEach(function(a){ if(a.flags.length) nAct++; });
   txt('art-count',nAct?String(nAct):'');
   $('art-disc').innerHTML=[0].concat(RATES).map(function(r){return '<option value="'+r+'"'+(r===watch.disc?' selected':'')+'>'+(r?r+' %':'Ingen rabatt')+'</option>'}).join('');
+  var gs={}, gl=[], blank=false;
+  all.forEach(function(a){ var g=String(a.group||'').trim(); if(!g) blank=true; else if(!gs[g]){gs[g]=1;gl.push(g)} });
+  gl.sort(function(x,y){return x.localeCompare(y,'sv',{numeric:true,sensitivity:'base'})});
+  if(blank&&gl.length) gl.push('__utan__');
+  if(artUi.g&&gl.indexOf(artUi.g)<0) artUi.g='';
+  $('art-g').innerHTML='<option value="">Alla artikelgrupper</option>'+gl.map(function(g){return '<option value="'+esc(g)+'"'+(g===artUi.g?' selected':'')+'>'+(g==='__utan__'?'(utan grupp)':esc(g))+'</option>'}).join('');
   if(!all.length){ txt('art-sum',''); $('art-body').innerHTML='<div class="empty">Här finns inga artiklar än. Läs in en prisfil på fliken Prisfil eller lägg upp artiklar på fliken EVM.</div>'; return; }
   var list=all.filter(function(a){
-    return (artUi.f==='all'||(artUi.f==='act'&&a.flags.length)||(artUi.f==='buy'&&a.buys.length)||(artUi.f==='evm'&&a.src.evm))&&(!q||(a.nr+' '+a.name+' '+a.group).toLowerCase().indexOf(q)>-1);
+    return (artUi.f==='all'||(artUi.f==='act'&&a.flags.length)||(artUi.f==='buy'&&a.buys.length)||(artUi.f==='evm'&&a.src.evm))&&(!artUi.g||(String(a.group||'').trim()||'__utan__')===artUi.g)&&(!q||(a.nr+' '+a.name+' '+a.group).toLowerCase().indexOf(q)>-1);
   });
   txt('art-sum',fmt(all.length)+' artiklar, varav '+fmt(nAct)+' behöver åtgärd. Marginalen bevakas mot målet '+fmt(s.targetTG,0)+' % TG, som ändras på fliken Prissättning.');
   var h='<div class="scroll"><table><thead><tr><th>Artikelnummer</th><th style="text-align:left">Benämning</th><th style="text-align:left">Artikelgrupp</th><th>Kostnad</th><th>'+(pf&&pf.kind==='N'?'ÅF-pris netto':'Ordinarie pris')+'</th><th>TG'+(watch.disc?' vid '+watch.disc+' %':'')+'</th><th style="text-align:left">Status</th><th></th></tr></thead><tbody>';
@@ -2146,6 +2154,7 @@ function artRender(){
   $('art-body').innerHTML=h+'</tbody></table></div><div class="chips"><span>Visar '+fmt(Math.min(artUi.limit,list.length))+' av '+fmt(list.length)+' artiklar.</span>'+(list.length>artUi.limit?'<button class="btn small" type="button" id="art-more">Visa fler</button>':'')+'</div>';
 }
 $('art-q').addEventListener('input',function(){ artUi.q=this.value; artUi.limit=100; artRender(); });
+$('art-g').addEventListener('change',function(){ artUi.g=this.value; artUi.limit=100; artRender(); $('art-g').focus(); });
 $('art-f').addEventListener('change',function(){ artUi.f=this.value; artUi.limit=100; artRender(); });
 $('art-disc').addEventListener('change',function(){ watch.disc=+this.value; persist(); artRender(); $('art-disc').focus(); });
 $('art-body').addEventListener('click',function(e){
