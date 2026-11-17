@@ -210,7 +210,7 @@ td .linkbtn{white-space:nowrap}
 .stats .k{font-size:13px;color:var(--muted);font-weight:600}
 .stats .v{font-family:var(--display);font-weight:800;font-size:27px;white-space:nowrap;letter-spacing:-.01em}
 .stats .v.neg{color:var(--crit)}
-@media (max-width:520px){.stats{grid-template-columns:1fr}}
+@media (max-width:520px){.stats{grid-template-columns:1fr}.stats .v{font-size:22px}}
 
 /* Tabeller */
 .scroll{overflow-x:auto;margin-top:12px;border-radius:12px}
@@ -270,6 +270,32 @@ textarea.ta{font:inherit;font-size:14px;color:inherit;width:100%;border:1px soli
 .drop.over .dhint{color:var(--accent);font-weight:700}
 @media (pointer:coarse){.drop .dhint{display:none}}
 
+.viz{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948;--sx:#98a4b0;--grid:#e8edf2;--axis:#c9d3dc;--plot:var(--surface)}
+@media (prefers-color-scheme: dark){:root:where(:not([data-theme="light"])) .viz{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#0ca30c;--s7:#9085e9;--s8:#e66767;--sx:#5f7384;--grid:#1d3141;--axis:#2e4a5e}}
+:root[data-theme="dark"] .viz{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#0ca30c;--s7:#9085e9;--s8:#e66767;--sx:#5f7384;--grid:#1d3141;--axis:#2e4a5e}
+.chart{position:relative;margin-top:14px}
+.chart svg{display:block;width:100%;overflow:visible}
+.chart text{font-family:var(--body);font-size:12px;fill:var(--muted)}
+.chart text.lab{fill:var(--text);font-size:13px}
+.chart text.val{fill:var(--text);font-weight:600}
+.chart .hit{fill:transparent;cursor:pointer;outline:none}
+.chart .hit:focus-visible{stroke:var(--accent);stroke-width:2}
+.chart .mk{transition:opacity .12s}
+.chart g.on .mk{opacity:.8}
+.tip{position:absolute;pointer-events:none;z-index:4;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:8px 11px;font-size:12.5px;white-space:nowrap;transform:translate(-50%,calc(-100% - 12px))}
+.tip .th{color:var(--muted);font-weight:600;margin-bottom:4px}
+.tip .tr{display:flex;align-items:center;gap:8px;line-height:1.5}
+.tip .tr b{color:var(--text);font-size:13.5px}
+.tip .tr span{color:var(--muted)}
+.tip .key{width:14px;height:2px;border-radius:2px;flex:0 0 auto}
+.lgd{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);margin-top:10px}
+.lgd i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.lgd i.ln{width:14px;height:2px;border-radius:2px;vertical-align:3px}
+details.tv{margin-top:10px;font-size:14px}
+details.tv summary{cursor:pointer;color:var(--accent);font-weight:600}
+.ana-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.ana-filters label.f{flex:1 1 170px}
+
 /* Översikt */
 .hero{position:relative;overflow:hidden;border-radius:22px;padding:28px 24px 34px;color:#fff;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 90' preserveAspectRatio='none'%3E%3Cpath d='M0 46C200 90 400 4 600 46S1000 90 1200 46V90H0Z' fill='%23fff' fill-opacity='.09'/%3E%3Cpath d='M0 64C240 30 420 92 640 62S1010 30 1200 66V90H0Z' fill='%23fff' fill-opacity='.07'/%3E%3C/svg%3E") bottom/100% 80px no-repeat,radial-gradient(500px 300px at 90% 0%,rgba(255,255,255,.16),transparent 70%),linear-gradient(125deg,#0b2f52 0%,#0a5f99 55%,#0a6a80 100%);box-shadow:0 22px 44px -26px rgba(10,95,153,.9);display:flex;flex-wrap:wrap;gap:18px 24px;align-items:flex-end;justify-content:space-between}
 .hero .eyebrow{color:#d6ecf7}
@@ -323,6 +349,7 @@ textarea.ta{font:inherit;font-size:14px;color:inherit;width:100%;border:1px soli
       <button class="tab" type="button" role="tab" id="tab-evm" data-tab="evm" aria-controls="panel-evm"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg><span>EVM</span><span class="count" id="evm-count"></span></button>
       <button class="tab" type="button" role="tab" id="tab-lev" data-tab="lev" aria-controls="panel-lev"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5M9 10h.01M15 10h.01"/></svg><span>Leverantörer</span><span class="count" id="sup-count"></span></button>
       <button class="tab" type="button" role="tab" id="tab-reg" data-tab="reg" aria-controls="panel-reg"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v3H9zM9 4.5H6a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5.5a1 1 0 0 0-1-1h-3M9 11h6M9 15h6M9 19h3"/></svg><span>Inköpsregister</span></button>
+      <button class="tab" type="button" role="tab" id="tab-ana" data-tab="ana" aria-controls="panel-ana"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></svg><span>Inköpsanalys</span></button>
       <div class="navgrp" aria-hidden="true">Portal</div>
       <button class="tab" type="button" role="tab" id="tab-sparade" data-tab="sparade" aria-controls="panel-sparade"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/></svg><span>Sparat och synk</span><span class="count" id="saved-count"></span></button>
     </div>
@@ -710,6 +737,46 @@ textarea.ta{font:inherit;font-size:14px;color:inherit;width:100%;border:1px soli
     <div class="chips"><button class="linkbtn" type="button" id="reg-clear" hidden>Rensa filter</button></div>
     <div class="stats" id="reg-stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
     <div id="reg-body"></div>
+  </section>
+</div>
+
+<div class="wrap panel viz" role="tabpanel" id="panel-ana" aria-labelledby="tab-ana" hidden>
+  <section class="card wide">
+    <div class="ana-filters">
+      <label class="f">Period
+        <span class="inp sel"><select id="ana-pre"><option value="3">Senaste 3 månaderna</option><option value="6">Senaste 6 månaderna</option><option value="12" selected>Senaste 12 månaderna</option><option value="ytd">I år</option><option value="ly">Förra året</option><option value="all">Hela perioden</option><option value="custom">Eget intervall</option></select></span></label>
+      <label class="f">Från datum
+        <span class="inp"><input type="date" id="ana-from"></span></label>
+      <label class="f">Till datum
+        <span class="inp"><input type="date" id="ana-to"></span></label>
+      <label class="f">Leverantör
+        <span class="inp sel"><select id="ana-sup"></select></span></label>
+    </div>
+    <p class="note" id="ana-note"></p>
+    <div class="stats" id="ana-stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+  </section>
+  <section class="card wide">
+    <h2>Inköp per leverantör</h2>
+    <p class="lead">Hemtaget inköpsvärde i perioden, räknat med dagens valutakurs. Tryck på en stapel för att visa bara den leverantören.</p>
+    <div class="chart" id="ana-bars"></div>
+    <details class="tv"><summary>Visa som tabell</summary><div class="scroll" id="ana-bars-t"></div></details>
+  </section>
+  <section class="card wide">
+    <h2>Inköp per månad</h2>
+    <p class="lead">Inköpsvärdet fördelat på leverantör, per fakturamånad.</p>
+    <div class="chart" id="ana-cols"></div>
+    <div class="lgd" id="ana-cols-l"></div>
+    <details class="tv"><summary>Visa som tabell</summary><div class="scroll" id="ana-cols-t"></div></details>
+  </section>
+  <section class="card wide">
+    <h2>Prisutveckling per artikel</h2>
+    <p class="lead">Hemtaget pris per styck vid varje köp, en linje per leverantör. Koppla fakturaraderna till dina artiklar under Leverantörer, så hamnar samma artikel från olika leverantörer i samma diagram.</p>
+    <div class="grid auto"><label class="f">Artikel
+      <span class="inp sel"><select id="ana-art"></select></span></label></div>
+    <div class="stats" id="ana-pstats" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))"></div>
+    <div class="chart" id="ana-line"></div>
+    <div class="lgd" id="ana-line-l"></div>
+    <details class="tv"><summary>Visa som tabell</summary><div class="scroll" id="ana-line-t"></div></details>
   </section>
 </div>
 
@@ -1948,12 +2015,13 @@ function regData(keep){
     g.sups=Object.keys(g.sup).join(', ');
     g.chg=g.prev&&g.prev.price>0?last.price/g.prev.price-1:NaN;
     g.kr=last.kr; g.minKr=g.min*rateOf(last.cur);
-    g.spend=0; g.items.forEach(function(x){ if(isFinite(x.qty)&&isFinite(x.kr)) g.spend+=x.qty*x.kr; });
+    g.spend=0; g.items.forEach(function(x){ var v=lineSum(x); if(isFinite(v)) g.spend+=v; });
     g.search=(g.title+' '+g.sups+' '+g.items.map(function(x){return x.art+' '+x.name+' '+x.inv}).join(' ')).toLowerCase();
   });
   list.sort(function(a,b){return (a.linked===b.linked?0:a.linked?-1:1)||a.title.localeCompare(b.title,'sv',{numeric:true,sensitivity:'base'})});
   return list;
 }
+function lineSum(x){return isFinite(x.qty)?x.qty*x.kr:x.kr}
 function rateOf(cur){return cur==='SEK'?1:(s.rates[cur]||NaN)}
 function regFiltered(){
   var all=regData(function(sp,inv){ var d=inv.date||''; return (!regUi.sup||sp.name===regUi.sup)&&(!regUi.from||(d&&d>=regUi.from))&&(!regUi.to||(d&&d<=regUi.to)); });
@@ -1990,20 +2058,20 @@ function regRender(){
     return;
   }
   var list=regFiltered(), items=[], spend=0, ups=0, supSet={};
-  list.forEach(function(g){ if(g.chg>0.0005) ups++; g.items.forEach(function(x){ items.push({g:g,x:x}); supSet[x.sup]=1; if(isFinite(x.qty)&&isFinite(x.kr)) spend+=x.qty*x.kr; }); });
+  list.forEach(function(g){ if(g.chg>0.0005) ups++; g.items.forEach(function(x){ items.push({g:g,x:x}); supSet[x.sup]=1; var v=lineSum(x); if(isFinite(v)) spend+=v; }); });
   var tile=function(k,v,s){return '<div><div class="k">'+k+'</div><div class="v">'+v+'</div>'+(s?'<div class="k">'+s+'</div>':'')+'</div>'};
   $('reg-stats').innerHTML=tile('Inköpt i urvalet',fmt(spend)+' kr','hemtaget, dagens kurs')+tile('Fakturarader',fmt(items.length),fmt(Object.keys(supSet).length)+(Object.keys(supSet).length===1?' leverantör':' leverantörer'))+
     tile('Artiklar',fmt(list.length),fmt(list.filter(function(g){return g.linked}).length)+' kopplade')+tile('Prishöjningar',fmt(ups),'senaste köp mot förra');
   var h, count;
   if(regUi.v==='buy'){
     /* ett köp per rad; utan vald sortering visas senaste köpen först */
-    var rows=regUi.sk?regSort(items,function(r,k){var x=r.x;return k==='title'?r.g.title:k==='qty'?x.qty:k==='price'?x.price*rateOf(x.cur):k==='kr'?x.kr:k==='sum'?x.qty*x.kr:x[k]},['d','inv','sup','title','art','name'])
+    var rows=regUi.sk?regSort(items,function(r,k){var x=r.x;return k==='title'?r.g.title:k==='qty'?x.qty:k==='price'?x.price*rateOf(x.cur):k==='kr'?x.kr:k==='sum'?lineSum(x):x[k]},['d','inv','sup','title','art','name'])
       :items.slice().sort(function(a,b){return a.x.d<b.x.d?1:a.x.d>b.x.d?-1:0});
     count=rows.length;
     h='<div class="scroll"><table><thead><tr>'+regSortTh('d','Datum',1)+regSortTh('inv','Faktura',1)+regSortTh('sup','Leverantör',1)+regSortTh('title','Artikel',1)+regSortTh('art','Lev. art.nr',1)+regSortTh('qty','Antal')+regSortTh('price','À-pris')+regSortTh('kr','Hemtaget kr')+regSortTh('sum','Summa kr')+'</tr></thead><tbody>'+
       rows.slice(0,regUi.limit).map(function(r){ var x=r.x;
         return '<tr><td>'+esc(x.d||'–')+'</td><td style="text-align:left">'+esc(x.inv)+'</td><td style="text-align:left">'+esc(x.sup)+'</td><td class="txt">'+(r.g.linked?'':'<span class="pill warn" style="margin:0 6px 0 0">Ej kopplad</span>')+esc(r.g.title)+'</td><td style="text-align:left">'+esc(x.art)+'</td>'+
-          '<td>'+qtyTxt(x.qty)+'</td><td>'+fmt(x.price,2)+' '+x.cur+'</td><td>'+(isFinite(x.kr)?fmt(x.kr,2):'–')+'</td><td>'+(isFinite(x.qty*x.kr)?fmt(x.qty*x.kr):'–')+'</td></tr>';
+          '<td>'+qtyTxt(x.qty)+'</td><td>'+fmt(x.price,2)+' '+x.cur+'</td><td>'+(isFinite(x.kr)?fmt(x.kr,2):'–')+'</td><td>'+(isFinite(lineSum(x))?fmt(lineSum(x)):'–')+'</td></tr>';
       }).join('')+'</tbody></table></div>';
   }else{
     var glist=regSort(list,function(g,k){return k==='d'?g.last.d:k==='n'?g.items.length:k==='last'?g.kr:g[k]},['title','sups','d']);
@@ -2045,7 +2113,7 @@ $('reg-body').addEventListener('click',function(e){
   if(b.id==='reg-xlsx'){
     var S=function(v){return {v:v==null?'':String(v),n:false}}, N=function(v){return typeof v==='number'&&isFinite(v)?{v:Math.round(v*10000)/10000,n:true}:{v:'',n:false}};
     var out=[['Artikel','Kopplad','Leverantör','Datum','Faktura','Lev. art.nr','Benämning på fakturan','Antal','À-pris','Valuta','Hemtaget à-pris','Hemtaget kr (dagens kurs)','Summa kr'].map(S)];
-    regFiltered().forEach(function(g){ g.items.forEach(function(x){ out.push([S(g.title),S(g.linked?'Ja':'Nej'),S(x.sup),S(x.d),S(x.inv),S(x.art),S(x.name),N(x.qty),N(x.price),S(x.cur),N(x.landed),N(x.kr),N(x.qty*x.kr)]); }); });
+    regFiltered().forEach(function(g){ g.items.forEach(function(x){ out.push([S(g.title),S(g.linked?'Ja':'Nej'),S(x.sup),S(x.d),S(x.inv),S(x.art),S(x.name),N(x.qty),N(x.price),S(x.cur),N(x.landed),N(x.kr),N(lineSum(x))]); }); });
     download(xlsxWrite(out,'Inköpsregister'),'inkopsregister-'+new Date().toLocaleDateString('sv-SE')+'.xlsx'); return;
   }
   if(b.id==='reg-more') regUi.limit+=200;
@@ -2178,7 +2246,7 @@ function supRender(){
       '<div id="sup-tbl-'+sp.id+'"></div></section>';
   }).join('');
   sups.forEach(function(sp){supTable(sp.id);invTable(sp.id)});
-  regRender(); artBadge(); if(tab==='hem') hemRender();
+  regRender(); artBadge(); if(tab==='hem') hemRender(); if(tab==='ana') anaRender();
 }
 function supAdd(){
   var inp=$('sup-new'), name=inp.value.trim();
@@ -2599,6 +2667,216 @@ $('sy-ind').addEventListener('click',function(){ showTab('sparade'); });
 document.addEventListener('visibilitychange',function(){ if(!document.hidden) sySync(); });
 setInterval(function(){ if(!document.hidden) sySync(); },60000);
 
+/* Inköpsanalys: diagram över inköp per leverantör och månad samt prisutveckling per artikel.
+   Diagrammen ritas som SVG. Leverantörsnamn och artikelnamn sätts med textContent, aldrig som HTML. */
+var anaUi={pre:'12',from:'',to:'',sup:'',art:''}, SVGNS='http://www.w3.org/2000/svg';
+function sv(tag,at,parent){ var e=document.createElementNS(SVGNS,tag); for(var k in at) e.setAttribute(k,at[k]); if(parent) parent.appendChild(e); return e; }
+function svt(at,txt,parent){ var e=sv('text',at,parent); e.textContent=txt; return e; }
+function supSlot(name){ var i=-1; sups.forEach(function(sp,j){ if(sp.name===name) i=j; }); return i>-1&&i<8?i:-1; }
+function supColor(name){ var i=supSlot(name); return i>-1?'var(--s'+(i+1)+')':'var(--sx)'; }
+function isoDay(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function anaRange(){
+  var now=new Date(), y=now.getFullYear(), p=anaUi.pre;
+  if(p==='custom') return [anaUi.from,anaUi.to];
+  if(p==='all') return ['',''];
+  if(p==='ytd') return [y+'-01-01',isoDay(now)];
+  if(p==='ly') return [(y-1)+'-01-01',(y-1)+'-12-31'];
+  var f=new Date(now); f.setMonth(f.getMonth()-(+p)); f.setDate(f.getDate()+1); return [isoDay(f),isoDay(now)];
+}
+function niceTicks(min,max,n){
+  if(!(max>min)){ max=min+1; }
+  var span=max-min, step=Math.pow(10,Math.floor(Math.log10(span/n))), err=span/n/step;
+  if(err>=7.5) step*=10; else if(err>=3.5) step*=5; else if(err>=1.5) step*=2;
+  var lo=Math.floor(min/step)*step, out=[]; for(var v=lo;v<=max+step*0.001;v+=step) out.push(+v.toFixed(10));
+  if(out[out.length-1]<max) out.push(+(out[out.length-1]+step).toFixed(10));
+  return {ticks:out,step:step};
+}
+function tickFmt(v,step,maxv){
+  if(maxv>=10000) return fmt(v/1000,step<1000?1:0)+' tkr';
+  var d=step>=1?0:Math.min(2,Math.ceil(-Math.log10(step)));
+  return fmt(v,d)+' kr';
+}
+function tipShow(wrap,x,y,head,rows){
+  var tp=wrap.querySelector('.tip'); if(!tp){ tp=document.createElement('div'); tp.className='tip'; tp.setAttribute('role','status'); wrap.appendChild(tp); }
+  tp.textContent='';
+  if(head){ var h=document.createElement('div'); h.className='th'; h.textContent=head; tp.appendChild(h); }
+  rows.forEach(function(r){
+    var row=document.createElement('div'); row.className='tr';
+    if(r.color){ var k=document.createElement('i'); k.className='key'; k.style.background=r.color; row.appendChild(k); }
+    var b=document.createElement('b'); b.textContent=r.value; row.appendChild(b);
+    if(r.label){ var s=document.createElement('span'); s.textContent=r.label; row.appendChild(s); }
+    tp.appendChild(row);
+  });
+  var W=wrap.clientWidth, half=Math.min(tp.offsetWidth/2+4,W/2);
+  tp.style.left=Math.max(half,Math.min(W-half,x))+'px'; tp.style.top=y+'px'; tp.hidden=false;
+}
+function tipHide(wrap){ var tp=wrap.querySelector('.tip'); if(tp) tp.hidden=true; }
+function tableHtml(head,rows){
+  return '<table><thead><tr>'+head.map(function(h,i){return '<th'+(i?'':' style="text-align:left"')+'>'+esc(h)+'</th>'}).join('')+'</tr></thead><tbody>'+
+    rows.map(function(r){return '<tr>'+r.map(function(c,i){return '<td'+(i?'':' style="text-align:left;white-space:normal"')+'>'+esc(c)+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table>';
+}
+function legendSet(el,items,line){
+  el.textContent='';
+  items.forEach(function(it){ var s=document.createElement('span'), i=document.createElement('i'); if(line) i.className='ln'; i.style.background=it.color; s.appendChild(i); s.appendChild(document.createTextNode(it.name)); el.appendChild(s); });
+}
+function anaEmpty(wrap,msg){ wrap.textContent=''; var d=document.createElement('div'); d.className='empty'; d.textContent=msg; wrap.appendChild(d); }
+
+function chartBars(wrap,rows){
+  /* liggande staplar, en per leverantör, största överst */
+  wrap.textContent='';
+  if(!rows.length){ anaEmpty(wrap,'Inga inköp i perioden.'); return; }
+  /* på smal skärm står namnet ovanför stapeln i stället för till vänster */
+  var W=Math.max(280,wrap.clientWidth), narrow=W<560, rh=narrow?50:36, labW=narrow?0:Math.min(200,Math.round(W*0.32)), valW=104, x0=narrow?0:labW+12, bw=Math.max(40,W-x0-valW), H=rows.length*rh+4;
+  var max=Math.max.apply(null,rows.map(function(r){return r.value})), tot=rows.reduce(function(s,r){return s+r.value},0);
+  var svg=sv('svg',{viewBox:'0 0 '+W+' '+H,height:H,role:'img','aria-label':'Inköp per leverantör'},wrap);
+  if(!narrow) sv('line',{x1:x0,x2:x0,y1:0,y2:H,stroke:'var(--axis)','stroke-width':1},svg);
+  rows.forEach(function(r,i){
+    var y=narrow?i*rh+34:i*rh+rh/2, w=max>0?Math.max(2,r.value/max*bw):2, th=18, g=sv('g',{},svg);
+    var lim=narrow?44:Math.max(10,Math.floor(labW/7.2)), nm=r.label.length>lim?r.label.slice(0,lim-1)+'…':r.label;
+    if(narrow) svt({x:0,y:i*rh+16,class:'lab'},nm,g); else svt({x:labW,y:y+4,'text-anchor':'end',class:'lab'},nm,g);
+    sv('path',{class:'mk',fill:r.color,d:'M'+x0+','+(y-th/2)+'h'+(w-4)+'a4,4 0 0 1 4,4v'+(th-8)+'a4,4 0 0 1 -4,4h'+(-(w-4))+'z'},g);
+    svt({x:x0+w+8,y:y+4,class:'val'},fmt(r.value)+' kr',g);
+    var hit=sv('rect',{class:'hit',x:0,y:i*rh,width:W,height:rh,tabindex:0,role:'button','aria-label':r.label+': '+fmt(r.value)+' kr, '+fmt(r.value/tot*100,1)+' procent. Visa bara denna leverantör.'},g);
+    var show=function(){ g.classList.add('on'); tipShow(wrap,(x0+w/2)*wrap.clientWidth/W,(i*rh+6)*wrap.clientWidth/W,r.label,[{value:fmt(r.value)+' kr',label:fmt(r.value/tot*100,1)+' % av perioden'},{value:fmt(r.n),label:r.n===1?'fakturarad':'fakturarader'}]); };
+    var hide=function(){ g.classList.remove('on'); tipHide(wrap); };
+    hit.addEventListener('pointerenter',show); hit.addEventListener('pointerleave',hide); hit.addEventListener('focus',show); hit.addEventListener('blur',hide);
+    var pick=function(){ anaUi.sup=anaUi.sup===r.label?'':r.label; anaRender(); };
+    hit.addEventListener('click',pick); hit.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } });
+  });
+}
+function chartCols(wrap,cols,series){
+  /* staplade kolumner per period; 2 px mellanrum mellan segmenten, rundad topp */
+  wrap.textContent='';
+  if(!cols.length){ anaEmpty(wrap,'Inga inköp i perioden.'); return; }
+  var W=Math.max(300,wrap.clientWidth), H=280, ml=64, mr=8, mt=12, mb=30, pw=W-ml-mr, ph=H-mt-mb;
+  var totals=cols.map(function(c,i){return series.reduce(function(s,se){return s+(se.values[i]||0)},0)});
+  var nt=niceTicks(0,Math.max.apply(null,totals.concat([1])),4), ymax=nt.ticks[nt.ticks.length-1], Y=function(v){return mt+ph-v/ymax*ph};
+  var svg=sv('svg',{viewBox:'0 0 '+W+' '+H,height:H,role:'img','aria-label':'Inköp per månad och leverantör'},wrap);
+  nt.ticks.forEach(function(v){ sv('line',{x1:ml,x2:W-mr,y1:Y(v),y2:Y(v),stroke:v?'var(--grid)':'var(--axis)','stroke-width':1},svg); svt({x:ml-8,y:Y(v)+4,'text-anchor':'end'},tickFmt(v,nt.step,ymax),svg); });
+  var band=pw/cols.length, bw=Math.min(24,Math.max(4,band*0.62)), every=Math.ceil(cols.length/Math.max(1,Math.floor(pw/64)));
+  cols.forEach(function(c,i){
+    var cx=ml+band*i+band/2, g=sv('g',{},svg), acc=0, segs=[];
+    series.forEach(function(se){ var v=se.values[i]||0; if(v>0) segs.push({v:v,color:se.color,name:se.name}); });
+    segs.forEach(function(sg,j){
+      var y1=Y(acc), y0=Y(acc+sg.v), top=j===segs.length-1, h=Math.max(1,y1-y0-(j>0?2:0)), yb=y1-(j>0?2:0);
+      if(top&&h>5) sv('path',{class:'mk',fill:sg.color,d:'M'+(cx-bw/2)+','+yb+'v'+(-(h-4))+'a4,4 0 0 1 4,-4h'+(bw-8)+'a4,4 0 0 1 4,4v'+(h-4)+'z'},g);
+      else sv('rect',{class:'mk',fill:sg.color,x:cx-bw/2,y:yb-h,width:bw,height:h},g);
+      acc+=sg.v;
+    });
+    if(i%every===0) svt({x:cx,y:H-10,'text-anchor':'middle'},c.label,svg);
+    var hit=sv('rect',{class:'hit',x:ml+band*i,y:mt,width:band,height:ph,tabindex:0,'aria-label':c.label+': '+fmt(totals[i])+' kr'},g);
+    var show=function(){ g.classList.add('on'); var rows=[{value:fmt(totals[i])+' kr',label:'totalt'}];
+      segs.slice().reverse().forEach(function(sg){ rows.push({color:sg.color,value:fmt(sg.v)+' kr',label:sg.name}); });
+      tipShow(wrap,cx*wrap.clientWidth/W,Y(totals[i])*wrap.clientWidth/W,c.full,rows); };
+    var hide=function(){ g.classList.remove('on'); tipHide(wrap); };
+    hit.addEventListener('pointerenter',show); hit.addEventListener('pointerleave',hide); hit.addEventListener('focus',show); hit.addEventListener('blur',hide);
+  });
+}
+function chartLine(wrap,series){
+  /* en linje per leverantör; hårkors som fäster vid närmaste köpdatum */
+  wrap.textContent='';
+  var pts=[]; series.forEach(function(se){ se.points.forEach(function(p){ pts.push(p); }); });
+  if(!pts.length){ anaEmpty(wrap,'Inga daterade köp av artikeln i perioden.'); return; }
+  var W=Math.max(300,wrap.clientWidth), H=280, ml=72, mr=16, mt=14, mb=30, pw=W-ml-mr, ph=H-mt-mb;
+  var t0=Math.min.apply(null,pts.map(function(p){return p.t})), t1=Math.max.apply(null,pts.map(function(p){return p.t}));
+  if(t1-t0<864e5*20){ t0-=864e5*15; t1+=864e5*15; }
+  var v0=Math.min.apply(null,pts.map(function(p){return p.v})), v1=Math.max.apply(null,pts.map(function(p){return p.v})), pad=(v1-v0)*0.15||v1*0.1||1;
+  var nt=niceTicks(Math.max(0,v0-pad),v1+pad,4), ylo=nt.ticks[0], yhi=nt.ticks[nt.ticks.length-1];
+  var X=function(tt){return ml+(tt-t0)/(t1-t0)*pw}, Y=function(v){return mt+ph-(v-ylo)/(yhi-ylo)*ph};
+  var svg=sv('svg',{viewBox:'0 0 '+W+' '+H,height:H,role:'img','aria-label':'Prisutveckling'},wrap);
+  nt.ticks.forEach(function(v,i){ sv('line',{x1:ml,x2:W-mr,y1:Y(v),y2:Y(v),stroke:i?'var(--grid)':'var(--axis)','stroke-width':1},svg); svt({x:ml-8,y:Y(v)+4,'text-anchor':'end'},tickFmt(v,nt.step,yhi),svg); });
+  var nx=Math.max(2,Math.min(6,Math.floor(pw/90)));
+  /* korta perioder får dag och månad, långa månad och år; samma etikett skrivs bara en gång */
+  var short=t1-t0<864e5*200, prevLab='';
+  for(var k=0;k<=nx;k++){ var tt=t0+(t1-t0)*k/nx, d=new Date(tt), lab=short?d.toLocaleDateString('sv-SE',{day:'numeric',month:'short'}):d.toLocaleDateString('sv-SE',{month:'short',year:'2-digit'});
+    if(lab===prevLab) continue; prevLab=lab; svt({x:X(tt),y:H-10,'text-anchor':k===0?'start':k===nx?'end':'middle'},lab,svg); }
+  var cross=sv('line',{x1:0,x2:0,y1:mt,y2:mt+ph,stroke:'var(--axis)','stroke-width':1,visibility:'hidden'},svg);
+  series.forEach(function(se){
+    var ps=se.points.slice().sort(function(a,b){return a.t-b.t});
+    if(ps.length>1) sv('path',{fill:'none',stroke:se.color,'stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round',d:ps.map(function(p,i){return (i?'L':'M')+X(p.t).toFixed(1)+','+Y(p.v).toFixed(1)}).join('')},svg);
+    ps.forEach(function(p){ sv('circle',{cx:X(p.t),cy:Y(p.v),r:4,fill:se.color,stroke:'var(--plot)','stroke-width':2},svg); });
+  });
+  /* värdet vid sista köpet skrivs ut vid linjens slut, om etiketterna inte krockar */
+  var ends=series.map(function(se){ var ps=se.points.slice().sort(function(a,b){return a.t-b.t}), l=ps[ps.length-1]; return {y:Y(l.v),x:X(l.t),v:l.v}; }).sort(function(a,b){return a.y-b.y});
+  var lastY=-99; ends.forEach(function(e){ if(e.y-lastY<16) return; lastY=e.y; svt({x:Math.min(e.x+8,W-mr-4),y:e.y-8,'text-anchor':e.x+60>W?'end':'start',class:'val'},fmt(e.v,e.v<100?2:0)+' kr',svg); });
+  var times=[]; pts.forEach(function(p){ if(times.indexOf(p.t)<0) times.push(p.t); }); times.sort(function(a,b){return a-b});
+  var hit=sv('rect',{class:'hit',x:ml,y:mt,width:pw,height:ph,tabindex:0,'aria-label':'Prisutveckling. Använd pilarna för att gå mellan köpen.'},svg), cur=-1;
+  var at=function(i){
+    cur=Math.max(0,Math.min(times.length-1,i)); var tt=times[cur], cx=X(tt), rows=[], topY=mt+ph;
+    cross.setAttribute('x1',cx); cross.setAttribute('x2',cx); cross.setAttribute('visibility','visible');
+    series.forEach(function(se){ se.points.forEach(function(p){ if(p.t===tt){ rows.push({color:se.color,value:fmt(p.v,2)+' kr',label:se.name+' · '+fmt(p.raw,2)+' '+p.cur+(isFinite(p.qty)?' · '+fmt(p.qty)+' st':'')}); topY=Math.min(topY,Y(p.v)); } }); });
+    tipShow(wrap,cx*wrap.clientWidth/W,topY*wrap.clientWidth/W,new Date(tt).toLocaleDateString('sv-SE',{day:'numeric',month:'long',year:'numeric'}),rows);
+  };
+  var off=function(){ cross.setAttribute('visibility','hidden'); tipHide(wrap); };
+  hit.addEventListener('pointermove',function(e){
+    var r=svg.getBoundingClientRect(), x=(e.clientX-r.left)*W/r.width, best=0;
+    times.forEach(function(tt,i){ if(Math.abs(X(tt)-x)<Math.abs(X(times[best])-x)) best=i; }); at(best);
+  });
+  hit.addEventListener('pointerleave',off); hit.addEventListener('blur',off);
+  hit.addEventListener('focus',function(){ at(cur<0?times.length-1:cur); });
+  hit.addEventListener('keydown',function(e){ if(e.key==='ArrowLeft'||e.key==='ArrowRight'){ e.preventDefault(); at(cur+(e.key==='ArrowRight'?1:-1)); } });
+}
+function anaRender(){
+  var rg=anaRange(), from=rg[0], to=rg[1];
+  if(anaUi.pre!=='custom'){ $('ana-from').value=from; $('ana-to').value=to; }
+  var names=sups.map(function(sp){return sp.name});
+  if(anaUi.sup&&names.indexOf(anaUi.sup)<0) anaUi.sup='';
+  $('ana-sup').innerHTML='<option value="">Alla leverantörer</option>'+names.slice().sort(function(a,b){return a.localeCompare(b,'sv')}).map(function(n){return '<option'+(n===anaUi.sup?' selected':'')+'>'+esc(n)+'</option>'}).join('');
+  var undated=0;
+  var groups=regData(function(sp,inv){ var d=inv.date||''; if(!d&&(from||to)){ return false; } return (!anaUi.sup||sp.name===anaUi.sup)&&(!from||d>=from)&&(!to||d<=to); });
+  sups.forEach(function(sp){ if(!anaUi.sup||sp.name===anaUi.sup) sp.invoices.forEach(function(inv){ if(!inv.date) undated++; }); });
+  var items=[]; groups.forEach(function(g){ g.items.forEach(function(x){ items.push(x); }); });
+  var total=0, bySup={}, invs={};
+  items.forEach(function(x){ var v=lineSum(x); if(!isFinite(v)) return; total+=v; var b=bySup[x.sup]||(bySup[x.sup]={label:x.sup,value:0,n:0,color:supColor(x.sup)}); b.value+=v; b.n++; invs[x.sup+'|'+x.inv]=1; });
+  var bars=Object.keys(bySup).map(function(k){return bySup[k]}).sort(function(a,b){return b.value-a.value});
+  var tile=function(k,v,s){return '<div><div class="k">'+k+'</div><div class="v">'+v+'</div>'+(s?'<div class="k">'+s+'</div>':'')+'</div>'};
+  $('ana-stats').innerHTML=tile('Inköpt i perioden',fmt(total)+' kr','hemtaget, dagens kurs')+tile('Fakturor',fmt(Object.keys(invs).length),fmt(items.length)+' rader')+
+    tile('Leverantörer',fmt(bars.length),bars.length?'störst: '+esc(bars[0].label):'')+tile('Artiklar',fmt(groups.length),fmt(groups.filter(function(g){return g.linked}).length)+' kopplade');
+  txt('ana-note',(from||to?'Period: '+(from||'början')+' – '+(to||'i dag')+'. ':'Hela perioden. ')+(anaUi.sup?'Visar bara '+anaUi.sup+'. ':'')+(undated&&(from||to)?undated+(undated===1?' faktura saknar':' fakturor saknar')+' datum och räknas inte med.':''));
+  var bw=$('ana-bars');
+  if(!sups.length){ ['ana-bars','ana-cols','ana-line'].forEach(function(id){ anaEmpty($(id),'Lägg till en leverantör och ladda upp fakturor under Leverantörer, så visas diagrammen här.'); }); }
+  else{
+    chartBars(bw,bars);
+    $('ana-bars-t').innerHTML=tableHtml(['Leverantör','Inköpt kr','Andel','Fakturarader'],bars.map(function(b){return [b.label,fmt(b.value),fmt(b.value/total*100,1)+' %',fmt(b.n)]}));
+    /* perioder: månader, eller kvartal om perioden är längre än två år */
+    var dated=items.filter(function(x){return x.d});
+    var m0=from?from.slice(0,7):(dated.length?dated.map(function(x){return x.d}).sort()[0].slice(0,7):''), m1=to?to.slice(0,7):(dated.length?dated.map(function(x){return x.d}).sort().pop().slice(0,7):'');
+    var months=[]; if(m0&&m1){ var y=+m0.slice(0,4), mo=+m0.slice(5,7); while(y*12+mo<=(+m1.slice(0,4))*12+(+m1.slice(5,7))&&months.length<240){ months.push(y+'-'+String(mo).padStart(2,'0')); mo++; if(mo>12){mo=1;y++;} } }
+    var quarter=months.length>24, keyOf=function(d){ var y=d.slice(0,4), m=+d.slice(5,7); return quarter?y+'-K'+Math.ceil(m/3):d.slice(0,7); };
+    var cols=[], idx={};
+    months.forEach(function(m){ var k=keyOf(m+'-01'); if(idx[k]===undefined){ idx[k]=cols.length; var dt=new Date(+m.slice(0,4),+m.slice(5,7)-1,1);
+      cols.push({k:k,label:quarter?'K'+k.slice(-1)+' '+k.slice(2,4):dt.toLocaleDateString('sv-SE',{month:'short'})+(cols.length===0||m.slice(5,7)==='01'?' '+m.slice(2,4):''),full:quarter?'Kvartal '+k.slice(-1)+' '+k.slice(0,4):dt.toLocaleDateString('sv-SE',{month:'long',year:'numeric'})}); } });
+    var serMap={}, order=[];
+    dated.forEach(function(x){ var v=lineSum(x); if(!isFinite(v)) return; var slot=supSlot(x.sup), nm=slot>-1?x.sup:'Övriga leverantörer';
+      var se=serMap[nm]; if(!se){ se=serMap[nm]={name:nm,color:slot>-1?supColor(x.sup):'var(--sx)',slot:slot>-1?slot:99,values:cols.map(function(){return 0})}; order.push(se); }
+      var ci=idx[keyOf(x.d)]; if(ci!==undefined) se.values[ci]+=v; });
+    order.sort(function(a,b){return a.slot-b.slot});
+    chartCols($('ana-cols'),cols,order);
+    legendSet($('ana-cols-l'),order.length>1?order:[],false);
+    $('ana-cols-t').innerHTML=tableHtml(['Period'].concat(order.map(function(s){return s.name}),['Totalt']),cols.map(function(c,i){ var tt=0; return [c.full].concat(order.map(function(s){ tt+=s.values[i]; return fmt(s.values[i]); }),[fmt(tt)]); }));
+    /* prisutveckling: standard är artikeln med flest köp i perioden */
+    var arts=groups.filter(function(g){return g.items.some(function(x){return x.d})}).sort(function(a,b){return a.title.localeCompare(b.title,'sv',{numeric:true,sensitivity:'base'})});
+    if(!arts.some(function(g){return g.k===anaUi.art})){ var best=null; arts.forEach(function(g){ if(!best||g.items.length>best.items.length) best=g; }); anaUi.art=best?best.k:''; }
+    $('ana-art').innerHTML=arts.length?arts.map(function(g){return '<option value="'+esc(g.k)+'"'+(g.k===anaUi.art?' selected':'')+'>'+esc(g.title)+' ('+g.items.length+(g.items.length===1?' köp':' köp')+')</option>'}).join(''):'<option value="">Inga artiklar i perioden</option>';
+    var g=null; arts.forEach(function(x){ if(x.k===anaUi.art) g=x; });
+    var lser=[], ptab=[];
+    if(g){
+      var bySup2={}; g.items.forEach(function(x){ if(!x.d||!isFinite(x.kr)) return; var se=bySup2[x.sup]||(bySup2[x.sup]={name:x.sup,color:supColor(x.sup),slot:supSlot(x.sup),points:[]}); se.points.push({t:Date.parse(x.d+'T12:00:00'),v:x.kr,raw:x.price,cur:x.cur,qty:x.qty}); ptab.push(x); });
+      lser=Object.keys(bySup2).map(function(k){return bySup2[k]}).sort(function(a,b){return (a.slot<0?99:a.slot)-(b.slot<0?99:b.slot)});
+      var srt=ptab.slice().sort(function(a,b){return a.d<b.d?-1:1}), first=srt[0], last=srt[srt.length-1], mn=Math.min.apply(null,srt.map(function(x){return x.kr})), mx=Math.max.apply(null,srt.map(function(x){return x.kr})), ch=first&&last&&first!==last?last.kr/first.kr-1:NaN;
+      $('ana-pstats').innerHTML=srt.length?tile('Senaste pris',fmt(last.kr,2)+' kr',esc(last.sup)+', '+last.d)+tile('Förändring i perioden',isFinite(ch)?(ch>0?'+':ch<0?'−':'')+fmt(Math.abs(ch*100),1)+' %':'–',isFinite(ch)?'hemtaget, mot '+fmt(first.kr,2)+' kr '+first.d+(first.cur===last.cur&&first.price>0?' · à-pris '+(last.price>=first.price?'+':'−')+fmt(Math.abs((last.price/first.price-1)*100),1)+' %':''):'ett köp')+tile('Lägsta',fmt(mn,2)+' kr','')+tile('Högsta',fmt(mx,2)+' kr',''):'';
+    }else $('ana-pstats').innerHTML='';
+    chartLine($('ana-line'),lser);
+    legendSet($('ana-line-l'),lser.length>1?lser:[],true);
+    $('ana-line-t').innerHTML=ptab.length?tableHtml(['Datum','Leverantör','Faktura','Antal','À-pris','Hemtaget kr'],ptab.slice().sort(function(a,b){return a.d<b.d?1:-1}).map(function(x){return [x.d,x.sup,x.inv,isFinite(x.qty)?fmt(x.qty):'',fmt(x.price,2)+' '+x.cur,fmt(x.kr,2)]})):'';
+  }
+}
+$('ana-pre').addEventListener('change',function(){ anaUi.pre=this.value; if(this.value==='custom'){ anaUi.from=$('ana-from').value; anaUi.to=$('ana-to').value; } anaRender(); });
+['ana-from','ana-to'].forEach(function(id){ $(id).addEventListener('change',function(){ anaUi.pre='custom'; $('ana-pre').value='custom'; anaUi.from=$('ana-from').value; anaUi.to=$('ana-to').value; anaRender(); }); });
+$('ana-sup').addEventListener('change',function(){ anaUi.sup=this.value; anaRender(); });
+$('ana-art').addEventListener('change',function(){ anaUi.art=this.value; anaRender(); });
+var anaW=0; window.addEventListener('resize',function(){ if(tab!=='ana') return; var w=$('ana-bars').clientWidth; if(Math.abs(w-anaW)>8){ anaW=w; anaRender(); } });
+
 /* Säkerhetskopia: allt i webbläsarens lagring (inklusive originalfiler) i en JSON-fil som kan läsas in på en annan enhet. */
 function blobToDataUrl(blob){return new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(fr.result)};fr.onerror=rej;fr.readAsDataURL(blob)})}
 function dataUrlToBlob(u){
@@ -2834,7 +3112,7 @@ $('panel-hem').addEventListener('click',function(e){
 /* Flikar */
 var TABS=[].slice.call(document.querySelectorAll('#tabs .tab'));
 var PAGES={hem:['','Översikt'],snabb:['Kalkyl','Snabbkalkyl'],inkop:['Kalkyl','Inköp och hemtagning'],pris:['Kalkyl','Prissättning'],stege:['Kalkyl','Prisstege'],valuta:['Kalkyl','Valuta'],
-  art:['Sortiment och inköp','Artiklar'],prisfil:['Sortiment och inköp','Prisfil från Visma'],evm:['Sortiment och inköp','EVM – eget varumärke'],lev:['Sortiment och inköp','Leverantörer'],reg:['Sortiment och inköp','Inköpsregister'],sparade:['Portal','Sparat och synk']};
+  art:['Sortiment och inköp','Artiklar'],prisfil:['Sortiment och inköp','Prisfil från Visma'],evm:['Sortiment och inköp','EVM – eget varumärke'],lev:['Sortiment och inköp','Leverantörer'],reg:['Sortiment och inköp','Inköpsregister'],ana:['Sortiment och inköp','Inköpsanalys'],sparade:['Portal','Sparat och synk']};
 var KALK=['inkop','pris','stege','valuta'];
 /* sidrubriken ersätter kortets egen rubrik när de är likadana; rubriken finns kvar för skärmläsare */
 TABS.forEach(function(b){ var id=b.dataset.tab, h=$('panel-'+id).querySelector('.card > h2'); if(h&&PAGES[id]&&h.textContent.trim()===PAGES[id][1]) h.classList.add('vh'); });
@@ -2858,6 +3136,7 @@ function showTab(name,focus){
     $('panel-'+b.dataset.tab).hidden=!on;
     if(on){ if(focus)b.focus(); if(b.scrollIntoView)b.scrollIntoView({block:'nearest',inline:'nearest'}); }
   });
+  if(name==='ana'){ anaW=$('ana-bars').clientWidth; anaRender(); }
   if(location.hash.slice(1)!==name){ try{history.replaceState(null,'','#'+name)}catch(e){} }
   window.scrollTo({top:0});
   persist();
