@@ -265,6 +265,12 @@ textarea.ta{font:inherit;font-size:14px;color:inherit;width:100%;border:1px soli
 /* Släppytor för filer */
 .drop{margin-top:12px;border:2px dashed var(--line-2);border-radius:14px;padding:14px 16px;background:var(--surface-2);transition:border-color .15s,background .15s,box-shadow .15s}
 .drop .chips{margin-top:0}
+h3.sub.fold{display:flex;align-items:center;justify-content:space-between;gap:10px}
+h3.sub .n{font-family:var(--body);font-size:12px;font-weight:700;color:var(--muted);background:var(--field);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:2px}
+.foldbtn{display:inline-flex;align-items:center;gap:4px;font-family:var(--body);font-size:14px}
+.foldbtn svg{transition:transform .15s}
+.foldbtn[aria-expanded="false"] svg{transform:rotate(-90deg)}
+.foldsum{font-size:13.5px;color:var(--muted);margin-top:8px}
 .drop .dhint{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:8px}
 .drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--surface));box-shadow:var(--ring)}
 .drop.over .dhint{color:var(--accent);font-weight:700}
@@ -709,7 +715,7 @@ details.tv summary{cursor:pointer;color:var(--accent);font-weight:600}
       <button class="btn primary" type="button" id="sup-add">Lägg till leverantör</button>
     </div>
     <p class="note" id="sup-status" aria-live="polite"></p>
-    <div class="chips"><button class="btn small" type="button" data-gotab="reg">Öppna inköpsregistret</button><span>Alla fakturarader samlade, sökbara och sorterbara.</span></div>
+    <div class="chips"><button class="btn small" type="button" data-gotab="reg">Öppna inköpsregistret</button><button class="btn small" type="button" id="fold-all" hidden></button><span>Alla fakturarader samlade, sökbara och sorterbara.</span></div>
   </section>
   <div id="sup-list"></div>
 </div>
@@ -1814,7 +1820,7 @@ function supAddFiles(sid,files,asInvoice){
             .catch(function(){supDbFail=true})
             .then(function(){
               var rec={id:id,name:f.name,size:f.size,added:Date.now(),kind:res.kind,rows:res.rows};
-              if(asInvoice){ invInit(sp,rec); sp.invoices.push(rec); ui.openInv=id; }
+              if(asInvoice){ invInit(sp,rec); sp.invoices.push(rec); ui.openInv=id; if(invFold[sid]){ delete invFold[sid]; foldSave(); } }
               else{ plInit(sp,rec); sp.files.push(rec); ui.open=id; ui.q=''; ui.limit=100; ui.cmp=null; ui.view='all'; }
               if(!res.rows.length) bad.push(f.name+' (ingen text kunde läsas ur filen)');
               else if(asInvoice&&!invLines(sp,rec).length) bad.push(f.name+' (inga fakturarader hittades – kontrollera kolumnvalen)');
@@ -2202,6 +2208,17 @@ function supTable(sid){
       (f.kind!=='Excel'&&f.kind!=='Text'?'<p class="note">Listan är tolkad ur PDF-filens text eller ur en bild. Kolumnerna kan hamna fel om prislistan har en ovanlig layout – jämför med originalet vid tveksamhet.</p>':'')
     :'<p class="note">Ingen text kunde läsas ur filen. Originalet finns kvar och går att öppna.</p>');
 }
+/* hopfällda fakturalistor per leverantör; valet sparas på enheten */
+var invFold={}; try{ invFold=JSON.parse(localStorage.getItem('me-portalen-invfold')||'{}')||{}; }catch(e){ invFold={}; }
+function foldSave(){ try{ localStorage.setItem('me-portalen-invfold',JSON.stringify(invFold)); }catch(e){} }
+function foldSummary(sp){
+  var n=sp.invoices.length, last=''; sp.invoices.forEach(function(f){ if((f.date||'')>last) last=f.date; });
+  return fmt(n)+(n===1?' faktura är dold':' fakturor är dolda')+(last?', senaste daterad '+last:'')+'. Du kan fortfarande ladda upp eller släppa nya fakturor här.';
+}
+function foldAllBtn(){
+  var b=$('fold-all'), withInv=sups.filter(function(sp){return sp.invoices.length}), anyOpen=withInv.some(function(sp){return !invFold[sp.id]});
+  b.hidden=!withInv.length; b.textContent=anyOpen?'Dölj alla fakturor':'Visa alla fakturor'; b.dataset.mode=anyOpen?'fold':'open';
+}
 function supInfoHtml(sp,ui){
   var i=sp.info, at=' data-sid="'+sp.id+'"', brief=[i.contact,i.terms,i.lead?'ledtid '+i.lead:''].filter(function(x){return x}).join(' · ');
   var f=function(k,label,ph){return '<label class="f">'+label+'<span class="inp"><input data-supinfo="'+k+'"'+at+' value="'+esc(i[k]||'')+'"'+(ph?' placeholder="'+ph+'"':'')+'></span></label>'};
@@ -2217,7 +2234,7 @@ function supRender(){
   $('sup-names').innerHTML=sups.map(function(sp){return '<option value="'+esc(sp.name)+'">'}).join('');
   artList();
   $('sup-list').innerHTML=sups.map(function(sp){
-    var ui=supUiOf(sp.id), at=' data-sid="'+sp.id+'"';
+    var ui=supUiOf(sp.id), at=' data-sid="'+sp.id+'"', folded=!!invFold[sp.id]&&sp.invoices.length>0;
     var item=function(f,on,meta,act,metaId){
       return '<li'+(on?' class="on"':'')+'><span class="fn">'+esc(f.name)+'</span><span class="meta"'+(metaId?' id="'+metaId+'"':'')+'>'+esc(meta)+'</span><span>'+
         '<button class="linkbtn" type="button" data-act="'+act.show+'"'+at+' data-fid="'+f.id+'" aria-expanded="'+on+'">'+(on?act.hide:act.open)+'</button>'+
@@ -2228,14 +2245,17 @@ function supRender(){
       '<button class="linkbtn" type="button" data-act="rename"'+at+'>Byt namn</button>'+
       '<button class="linkbtn" type="button" data-act="delsup"'+at+' style="color:var(--crit)">Ta bort leverantör</button></span></div>'+
       supInfoHtml(sp,ui)+
-      '<h3 class="sub">Fakturor</h3>'+
+      '<h3 class="sub fold"><span>Fakturor'+(sp.invoices.length?'<span class="n">'+sp.invoices.length+'</span>':'')+'</span>'+
+        (sp.invoices.length?'<button class="linkbtn foldbtn" type="button" data-act="foldinv"'+at+' aria-expanded="'+!folded+'" aria-controls="sup-invbox-'+sp.id+'"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>'+(folded?'Visa fakturor':'Dölj fakturor')+'</button>':'')+'</h3>'+
       '<div class="drop" data-drop="inv" data-sid="'+sp.id+'"><div class="chips"><input type="file" class="vh" id="sup-ifile-'+sp.id+'" data-supfile="'+sp.id+'" data-kind="inv" multiple accept="'+ACC+'">'+
       '<label class="btn primary" for="sup-ifile-'+sp.id+'">Ladda upp faktura</label><span>'+esc(ui.imsg||(sp.invoices.length?'':'Inga fakturor uppladdade än.'))+'</span></div>'+
       '<div class="dhint"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg><span>eller dra och släpp fakturor här (PDF, Excel eller bild)</span></div></div>'+
+      (folded?'<p class="foldsum">'+foldSummary(sp)+'</p>':'')+
+      '<div id="sup-invbox-'+sp.id+'"'+(folded?' hidden':'')+'>'+
       (sp.invoices.length?'<ul class="files">'+sp.invoices.map(function(f){
         return item(f,ui.openInv===f.id,invMeta(sp,f),{show:'showinv',open:'Visa faktura',hide:'Dölj faktura',del:'delinv'},'inv-meta-'+f.id);
       }).join('')+'</ul>':'')+
-      '<div id="sup-inv-'+sp.id+'"></div>'+
+      '<div id="sup-inv-'+sp.id+'"></div></div>'+
       '<h3 class="sub">Prislistor</h3>'+
       '<div class="drop" data-drop="pl" data-sid="'+sp.id+'"><div class="chips"><input type="file" class="vh" id="sup-file-'+sp.id+'" data-supfile="'+sp.id+'" multiple accept="'+ACC+'">'+
       '<label class="btn" for="sup-file-'+sp.id+'">Ladda upp prislista</label><span>'+esc(ui.msg||(sp.files.length?'':'Inga prislistor uppladdade än.'))+'</span></div>'+
@@ -2246,6 +2266,7 @@ function supRender(){
       '<div id="sup-tbl-'+sp.id+'"></div></section>';
   }).join('');
   sups.forEach(function(sp){supTable(sp.id);invTable(sp.id)});
+  foldAllBtn();
   regRender(); artBadge(); if(tab==='hem') hemRender(); if(tab==='ana') anaRender();
 }
 function supAdd(){
@@ -2254,6 +2275,10 @@ function supAdd(){
   sups.push(supNorm({id:uid(),name:name})); inp.value=''; supRender(); supSave();
 }
 $('sup-add').addEventListener('click',supAdd);
+$('fold-all').addEventListener('click',function(){
+  var fold=this.dataset.mode==='fold'; sups.forEach(function(sp){ if(fold&&sp.invoices.length) invFold[sp.id]=1; else delete invFold[sp.id]; });
+  foldSave(); supRender(); $('fold-all').focus();
+});
 $('sup-new').addEventListener('keydown',function(e){ if(e.key==='Enter') supAdd(); });
 $('sup-list').addEventListener('change',function(e){
   var el=e.target, d=el.dataset, sp, inv;
@@ -2325,6 +2350,10 @@ $('sup-list').addEventListener('click',function(e){
   var drop=function(id){ idbDo('readwrite',function(st){return st.delete('file:'+id)}).catch(function(){}); };
   if(act==='show'){ ui.open=ui.open===fid?null:fid; ui.q=''; ui.limit=100; supRender(); }
   else if(act==='showinv'){ ui.openInv=ui.openInv===fid?null:fid; supRender(); }
+  else if(act==='foldinv'){
+    if(invFold[sid]) delete invFold[sid]; else invFold[sid]=1; foldSave(); supRender();
+    var fb=document.querySelector('[data-act="foldinv"][data-sid="'+sid+'"]'); if(fb) fb.focus();
+  }
   else if(act==='more'){ ui.limit+=200; supTable(sid); }
   else if(act==='skipline'||act==='unskip'){
     inv=invFind(sp,b.dataset.iid); if(!inv) return;
