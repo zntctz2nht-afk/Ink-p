@@ -1112,6 +1112,11 @@ function pfGuess(){
     m.cost=find(/ink.*pris|kalkyl/i);
     m.price=find(/f.rs.*pris|utpris|^pris/i,m.cost);
     if(m.price<0) m.price=find(/pris/i,m.cost);
+    /* rubriken på priskolumnen avgör vilket pris filen innehåller */
+    var ph=m.price>-1?String(R[0][m.price]||''):'';
+    if(/netto|åf|af-?pris|återförs/i.test(ph)) pf.kind='N';
+    else if(/inkl/i.test(ph)) pf.kind='Rin';
+    else if(/f.rs.*pris|ordinarie|grundpris|utpris|listpris/i.test(ph)) pf.kind='R';
   }
   for(c=0;c<nc&&m.name<0;c++) if(c!==m.art&&c!==m.group&&share(c)<0.2) m.name=c;
   for(c=0;c<nc&&m.price<0;c++) if(c!==m.art&&c!==m.cost&&share(c)>0.8&&hasDec(c)) m.price=c;
