@@ -181,6 +181,7 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mu
 .btn.small{padding:6px 12px;font-size:13.5px;border-radius:9px}
 .btn:disabled{opacity:.5;cursor:not-allowed;transform:none;filter:none}
 .linkbtn{background:none;border:0;color:var(--accent);font-weight:600;cursor:pointer;padding:4px 6px;border-radius:6px}
+td .linkbtn{white-space:nowrap}
 .linkbtn:hover{background:color-mix(in srgb,var(--accent) 9%,transparent)}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .vh:focus-visible+label{outline:3px solid var(--accent);outline-offset:2px}
@@ -260,6 +261,14 @@ h3.sub{font-size:16px;margin-top:24px;padding-top:16px;border-top:1px solid var(
 details.raw{margin-top:12px;font-size:14px}
 details.raw summary{cursor:pointer;color:var(--accent);font-weight:600}
 textarea.ta{font:inherit;font-size:14px;color:inherit;width:100%;border:1px solid var(--line-2);border-radius:11px;background:var(--field);padding:8px 10px;resize:vertical;line-height:1.35;display:block}
+
+/* Släppytor för filer */
+.drop{margin-top:12px;border:2px dashed var(--line-2);border-radius:14px;padding:14px 16px;background:var(--surface-2);transition:border-color .15s,background .15s,box-shadow .15s}
+.drop .chips{margin-top:0}
+.drop .dhint{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:8px}
+.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--surface));box-shadow:var(--ring)}
+.drop.over .dhint{color:var(--accent);font-weight:700}
+@media (pointer:coarse){.drop .dhint{display:none}}
 
 /* Översikt */
 .hero{position:relative;overflow:hidden;border-radius:22px;padding:28px 24px 34px;color:#fff;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 90' preserveAspectRatio='none'%3E%3Cpath d='M0 46C200 90 400 4 600 46S1000 90 1200 46V90H0Z' fill='%23fff' fill-opacity='.09'/%3E%3Cpath d='M0 64C240 30 420 92 640 62S1010 30 1200 66V90H0Z' fill='%23fff' fill-opacity='.07'/%3E%3C/svg%3E") bottom/100% 80px no-repeat,radial-gradient(500px 300px at 90% 0%,rgba(255,255,255,.16),transparent 70%),linear-gradient(125deg,#0b2f52 0%,#0a5f99 55%,#0a6a80 100%);box-shadow:0 22px 44px -26px rgba(10,95,153,.9);display:flex;flex-wrap:wrap;gap:18px 24px;align-items:flex-end;justify-content:space-between}
@@ -2072,15 +2081,17 @@ function supRender(){
       '<button class="linkbtn" type="button" data-act="delsup"'+at+' style="color:var(--crit)">Ta bort leverantör</button></span></div>'+
       supInfoHtml(sp,ui)+
       '<h3 class="sub">Fakturor</h3>'+
-      '<div class="chips"><input type="file" class="vh" id="sup-ifile-'+sp.id+'" data-supfile="'+sp.id+'" data-kind="inv" multiple accept="'+ACC+'">'+
+      '<div class="drop" data-drop="inv" data-sid="'+sp.id+'"><div class="chips"><input type="file" class="vh" id="sup-ifile-'+sp.id+'" data-supfile="'+sp.id+'" data-kind="inv" multiple accept="'+ACC+'">'+
       '<label class="btn primary" for="sup-ifile-'+sp.id+'">Ladda upp faktura</label><span>'+esc(ui.imsg||(sp.invoices.length?'':'Inga fakturor uppladdade än.'))+'</span></div>'+
+      '<div class="dhint"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg><span>eller dra och släpp fakturor här (PDF, Excel eller bild)</span></div></div>'+
       (sp.invoices.length?'<ul class="files">'+sp.invoices.map(function(f){
         return item(f,ui.openInv===f.id,invMeta(sp,f),{show:'showinv',open:'Visa faktura',hide:'Dölj faktura',del:'delinv'},'inv-meta-'+f.id);
       }).join('')+'</ul>':'')+
       '<div id="sup-inv-'+sp.id+'"></div>'+
       '<h3 class="sub">Prislistor</h3>'+
-      '<div class="chips"><input type="file" class="vh" id="sup-file-'+sp.id+'" data-supfile="'+sp.id+'" multiple accept="'+ACC+'">'+
+      '<div class="drop" data-drop="pl" data-sid="'+sp.id+'"><div class="chips"><input type="file" class="vh" id="sup-file-'+sp.id+'" data-supfile="'+sp.id+'" multiple accept="'+ACC+'">'+
       '<label class="btn" for="sup-file-'+sp.id+'">Ladda upp prislista</label><span>'+esc(ui.msg||(sp.files.length?'':'Inga prislistor uppladdade än.'))+'</span></div>'+
+      '<div class="dhint"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg><span>eller dra och släpp prislistor här</span></div></div>'+
       (sp.files.length?'<ul class="files">'+sp.files.map(function(f){
         return item(f,ui.open===f.id,f.kind+' · '+(f.map&&plLines(f).length?fmt(plLines(f).length)+' priser':fmt((f.rows||[]).length)+' rader')+' · '+(f.cur||'')+' · gäller från '+(f.date||new Date(f.added).toLocaleDateString('sv-SE')),{show:'show',open:'Visa lista',hide:'Dölj lista',del:'delfile'});
       }).join('')+'</ul>':'')+
@@ -2133,6 +2144,25 @@ $('sup-list').addEventListener('change',function(e){
     var again=document.querySelector('[data-invmap="'+d.invmap+'"][data-iid="'+inv.id+'"]'); if(again) again.focus();
   }
 });
+/* dra och släpp: fakturaytan läser in fakturor, prislisteytan prislistor */
+function hasFiles(e){ var ty=e.dataTransfer&&e.dataTransfer.types; return !!ty&&[].indexOf.call(ty,'Files')>-1; }
+['dragenter','dragover'].forEach(function(ev){
+  $('sup-list').addEventListener(ev,function(e){
+    var z=e.target.closest&&e.target.closest('.drop'); if(!z||!hasFiles(e)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect='copy'; z.classList.add('over');
+  });
+});
+$('sup-list').addEventListener('dragleave',function(e){
+  var z=e.target.closest&&e.target.closest('.drop'); if(z&&!z.contains(e.relatedTarget)) z.classList.remove('over');
+});
+$('sup-list').addEventListener('drop',function(e){
+  var z=e.target.closest&&e.target.closest('.drop'); if(!z||!hasFiles(e)) return;
+  e.preventDefault(); z.classList.remove('over');
+  var fs=e.dataTransfer.files; if(fs&&fs.length) supAddFiles(z.dataset.sid,fs,z.dataset.drop==='inv');
+});
+/* en fil som släpps utanför en släppyta ska inte öppnas i webbläsaren och lämna portalen */
+window.addEventListener('dragover',function(e){ if(hasFiles(e)&&!(e.target.closest&&e.target.closest('.drop'))){ e.preventDefault(); e.dataTransfer.dropEffect='none'; } });
+window.addEventListener('drop',function(e){ if(hasFiles(e)&&!(e.target.closest&&e.target.closest('.drop'))){ e.preventDefault(); if(tab==='lev') supStatus(sups.length?'Släpp filen i fakturaytan eller prislisteytan hos rätt leverantör.':'Lägg först till en leverantör, och släpp sedan filen i dess fakturayta.'); } });
 $('sup-list').addEventListener('toggle',function(e){ var el=e.target; if(el.dataset&&el.dataset.supdet) supUiOf(el.dataset.supdet).info=el.open; },true);
 $('sup-list').addEventListener('input',function(e){
   var el=e.target; if(el.dataset.supq===undefined) return;
