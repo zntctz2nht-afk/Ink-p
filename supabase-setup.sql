@@ -15,11 +15,13 @@ alter table public.portal_state enable row level security;
 drop policy if exists "portal_state egen data" on public.portal_state;
 create policy "portal_state egen data" on public.portal_state
   for all to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 
 create or replace function public.portal_touch() returns trigger
-language plpgsql as $$
+language plpgsql
+set search_path = ''
+as $$
 begin
   new.updated_at = now();
   return new;
@@ -36,5 +38,5 @@ on conflict (id) do nothing;
 drop policy if exists "portal-files egna filer" on storage.objects;
 create policy "portal-files egna filer" on storage.objects
   for all to authenticated
-  using (bucket_id = 'portal-files' and (storage.foldername(name))[1] = auth.uid()::text)
-  with check (bucket_id = 'portal-files' and (storage.foldername(name))[1] = auth.uid()::text);
+  using (bucket_id = 'portal-files' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'portal-files' and (storage.foldername(name))[1] = (select auth.uid())::text);

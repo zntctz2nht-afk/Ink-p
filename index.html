@@ -700,7 +700,7 @@ textarea.ta{font:inherit;font-size:14px;color:inherit;width:100%;border:1px soli
   </section>
   <section class="card wide">
     <h2>Synk mellan enheter</h2>
-    <p class="lead">Logga in mot ditt Supabase-projekt, så sparas allt i molnet och hålls lika på dator och telefon. Logga in med samma uppgifter på varje enhet.</p>
+    <p class="lead">Logga in med din e-post och ditt lösenord i Supabase, så sparas allt i molnet och hålls lika på dator och telefon. Projektets adress och nyckel är redan ifyllda. Logga in med samma uppgifter på varje enhet.</p>
     <div id="sy-login">
       <div class="grid auto">
         <label class="f">Projektets adress (Project URL)
@@ -2345,6 +2345,8 @@ $('art-body').addEventListener('click',function(e){
 
 /* Molnsynk mot Supabase. Tre delar sparas som text i tabellen portal_state (main, prisfil, suppliers) och originalfiler i
    lagringshinken portal-files. Varje del har en tidsstämpel; ändras samma data på två enheter får användaren välja version. */
+/* Rentons Supabase-projekt. Den publika nyckeln får finnas i sidan: åtkomsten styrs av inloggningen och radreglerna i databasen. */
+var SY_DEF_URL='https://fhxcrztubijkdfqpcqeh.supabase.co', SY_DEF_KEY='sb_publishable_dOK187rN_Raz8Ywh0PNugg_C4i3rTNE';
 var SYK='me-portalen-sync', SY_PARTS=['main','prisfil','suppliers'], SY_BUCKET='portal-files';
 var sy={url:'',key:'',rt:'',uid:'',email:'',meta:{},up:{},last:0}, syTok='', syExp=0, syBusy=false, syTimer=null, syMsg='', syConflict=null;
 try{ var syRaw=JSON.parse(localStorage.getItem(SYK)||'null'); if(syRaw){ for(var syK in syRaw) sy[syK]=syRaw[syK]; } }catch(e){}
@@ -2381,7 +2383,7 @@ function syKick(){ if(!syOn()||importing) return; clearTimeout(syTimer); syTimer
 function syUi(state){
   var on=syOn(), ind=$('sy-ind');
   $('sy-login').hidden=on; $('sy-on').hidden=!on;
-  if(!on){ if(!$('sy-url').value) $('sy-url').value=sy.url||''; if(!$('sy-key').value) $('sy-key').value=sy.key||''; if(!$('sy-email').value) $('sy-email').value=sy.email||''; }
+  if(!on){ if(!$('sy-url').value) $('sy-url').value=sy.url||SY_DEF_URL; if(!$('sy-key').value) $('sy-key').value=sy.key||SY_DEF_KEY; if(!$('sy-email').value) $('sy-email').value=sy.email||''; }
   ind.hidden=!on&&!sy.url; ind.className='syind'+(syConflict||(!on&&sy.url)||state==='err'?' warn':'');
   ind.textContent=!on?'Synk: inte inloggad':syConflict?'Synk: välj version':state==='busy'?'Synkar …':state==='err'?'Synk: fel':'Synkad';
   var d=sy.last?new Date(sy.last):null;
